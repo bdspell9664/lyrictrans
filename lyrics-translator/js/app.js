@@ -1198,7 +1198,7 @@ class LyricTranslatorApp {
             } else if (element.text) {
                 // ASS 或 TXT 格式
                 element.translatedText = translatedLines[lineIndex] || element.text;
-                lineIndex += 2; // +2 跳过空行
+                lineIndex++; // +1 处理下一行，不需要跳过空行
             }
         });
     }

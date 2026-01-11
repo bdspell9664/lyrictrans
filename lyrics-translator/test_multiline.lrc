@@ -1,11 +1,8 @@
 [ti:Test Song]
 [ar:Test Artist]
 [al:Test Album]
-[by:Test]
-[00:00.00]Hello
-[00:05.00]World
-[00:10.00]This is a test
-[00:15.00]Lyrics translation
-[00:20.00]Multiple lines
-[00:25.00]Working correctly
-[00:30.00]End of test
+[00:00.00]First line of the test song
+[00:05.00]Second line with different content
+[00:10.00]Third line to test translation
+[00:15.00]Fourth line with unique text
+[00:20.00]Fifth and final line for testing

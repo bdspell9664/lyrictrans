@@ -1,0 +1,7 @@
+Hello
+World
+This is a test
+Lyrics translation
+Multiple lines
+Working correctly
+End of test
