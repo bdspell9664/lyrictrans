@@ -60,6 +60,7 @@ class AIService {
         const appid = this.config.appid;
         const secretKey = this.config.secretKey;
         const proxyUrl = 'http://localhost:3001/translate'; // 使用本地代理服务器
+        const directApiUrl = 'https://fanyi-api.baidu.com/api/trans/vip/translate'; // 百度翻译API直接地址
         
         // 百度语言代码映射
         const langMap = {
@@ -90,7 +91,8 @@ class AIService {
         const salt = Math.floor(Math.random() * 1000000000).toString();
         
         // 生成签名
-        const sign = this.md5(`${appid}${text}${salt}${secretKey}`);
+        const signString = `${appid}${text}${salt}${secretKey}`;
+        const sign = this.md5(signString);
 
         const requestOptions = {
             method: 'POST',
@@ -107,28 +109,46 @@ class AIService {
             })
         };
 
-        try {
-            // 简化请求逻辑，直接发送请求到代理服务器
-            const requestOptionsWithTimeout = {
-                ...requestOptions,
-                timeout: 10000 // 添加10秒超时
+        // 使用 AbortController 实现超时处理
+        const createRequestWithTimeout = (url) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+                controller.abort();
+            }, 10000); // 10秒超时
+            
+            return {
+                options: {
+                    ...requestOptions,
+                    signal: controller.signal
+                },
+                timeoutId
             };
+        };
+
+        try {
+            // 检查代理服务器是否可用
+            const isProxyAvailable = await this.checkProxyAvailability(proxyUrl);
+            let response;
+            let requestInfo;
             
-            console.log('发送翻译请求到代理服务器:', proxyUrl);
-            console.log('请求参数:', {
-                text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
-                from: from,
-                to: to,
-                appid: appid,
-                salt: salt
-            });
+            if (isProxyAvailable) {
+                // 代理服务器可用，使用代理
+                requestInfo = createRequestWithTimeout(proxyUrl);
+                console.log('发送翻译请求到代理服务器:', proxyUrl);
+                response = await fetch(proxyUrl, requestInfo.options);
+            } else {
+                // 代理服务器不可用，尝试直接调用API
+                requestInfo = createRequestWithTimeout(directApiUrl);
+                console.log('代理服务器不可用，尝试直接调用百度翻译API:', directApiUrl);
+                response = await fetch(directApiUrl, requestInfo.options);
+            }
             
-            // 通过代理服务器发送请求
-            const response = await fetch(proxyUrl, requestOptions);
-            console.log('代理服务器响应状态:', response.status);
+            clearTimeout(requestInfo.timeoutId); // 清除超时定时器
+            
+            console.log('翻译请求响应状态:', response.status);
             
             if (!response.ok) {
-                throw new Error(`代理服务器请求失败，状态码: ${response.status}`);
+                throw new Error(`请求失败，状态码: ${response.status}`);
             }
             
             const data = await response.json();
@@ -152,7 +172,42 @@ class AIService {
         } catch (error) {
             console.error('百度翻译请求失败:', error.message);
             console.error('完整错误信息:', error);
+            
+            // 检查是否是跨域错误
+            if (error.message.includes('CORS') || error.message.includes('cross-origin')) {
+                throw new Error('翻译请求失败：跨域错误。请启动本地代理服务器后重试。在项目根目录执行：npm start');
+            } else if (error.name === 'AbortError') {
+                throw new Error('翻译请求超时。请检查网络连接或尝试重启代理服务器。');
+            } else if (error.message.includes('Failed to fetch')) {
+                throw new Error('翻译请求失败：无法连接到服务器。请确保本地代理服务器已启动，或检查网络连接。');
+            }
+            
             throw error;
+        }
+    }
+    
+    /**
+     * 检查代理服务器是否可用
+     * @param {string} proxyUrl - 代理服务器URL
+     * @returns {Promise<boolean>} - 代理服务器是否可用
+     */
+    async checkProxyAvailability(proxyUrl) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+                controller.abort();
+            }, 2000); // 2秒超时
+            
+            const response = await fetch(proxyUrl, {
+                method: 'HEAD',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            return response.ok;
+        } catch (error) {
+            console.log('代理服务器不可用:', error.message);
+            return false;
         }
     }
     

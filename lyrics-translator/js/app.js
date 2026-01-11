@@ -103,6 +103,21 @@ class LyricTranslatorApp {
         // 批量功能元素
         this.batchTranslateBtn = document.getElementById('batchTranslateBtn');
         this.batchDownloadBtn = document.getElementById('batchDownloadBtn');
+        
+        // 控制台相关元素
+        this.consoleContainer = document.querySelector('.console-container');
+        this.toggleConsoleBtn = document.getElementById('toggleConsole');
+        this.clearLogBtn = document.getElementById('clearLog');
+        this.consoleLog = document.getElementById('consoleLog');
+        this.proxyStatus = document.getElementById('proxyStatus');
+        
+        // 验证控制台元素是否成功获取
+        console.log('控制台元素获取结果:');
+        console.log('consoleContainer:', this.consoleContainer);
+        console.log('toggleConsoleBtn:', this.toggleConsoleBtn);
+        console.log('clearLogBtn:', this.clearLogBtn);
+        console.log('consoleLog:', this.consoleLog);
+        console.log('proxyStatus:', this.proxyStatus);
     }
 
     /**
@@ -115,6 +130,7 @@ class LyricTranslatorApp {
         if (this.browseBtn) {
             this.browseBtn.addEventListener('click', () => {
                 console.log('浏览按钮点击');
+                this.log('info', '浏览按钮点击');
                 this.fileInput.click();
             });
             console.log('浏览按钮事件绑定成功');
@@ -125,6 +141,7 @@ class LyricTranslatorApp {
         if (this.fileInput) {
             this.fileInput.addEventListener('change', (e) => {
                 console.log('文件选择事件触发');
+                this.log('info', '文件选择事件触发');
                 this.handleFileSelect(e);
             });
             console.log('文件输入事件绑定成功');
@@ -137,21 +154,25 @@ class LyricTranslatorApp {
             // 添加 dragenter 事件监听器
             this.uploadArea.addEventListener('dragenter', (e) => {
                 console.log('拖放进入事件触发');
+                this.log('info', '拖放进入事件触发');
                 this.handleDragEnter(e);
             });
             
             this.uploadArea.addEventListener('dragover', (e) => {
                 console.log('拖放悬停事件触发');
+                this.log('info', '拖放悬停事件触发');
                 this.handleDragOver(e);
             });
             
             this.uploadArea.addEventListener('dragleave', (e) => {
                 console.log('拖放离开事件触发');
+                this.log('info', '拖放离开事件触发');
                 this.handleDragLeave(e);
             });
             
             this.uploadArea.addEventListener('drop', (e) => {
                 console.log('拖放放下事件触发');
+                this.log('info', '拖放放下事件触发');
                 this.handleDrop(e);
             });
             console.log('拖放事件绑定成功');
@@ -188,6 +209,7 @@ class LyricTranslatorApp {
         if (this.translationApi) {
             this.translationApi.addEventListener('change', (e) => {
                 console.log('翻译API选择事件触发');
+                this.log('info', '翻译API选择事件触发');
                 this.handleTranslationApiChange(e);
             });
             console.log('翻译API选择事件绑定成功');
@@ -199,6 +221,7 @@ class LyricTranslatorApp {
         if (this.translateBtn) {
             this.translateBtn.addEventListener('click', () => {
                 console.log('翻译按钮点击');
+                this.log('info', '翻译按钮点击');
                 this.translateLyrics();
             });
             console.log('翻译按钮事件绑定成功');
@@ -210,6 +233,7 @@ class LyricTranslatorApp {
         if (this.audioBrowseBtn) {
             this.audioBrowseBtn.addEventListener('click', () => {
                 console.log('音频浏览按钮点击');
+                this.log('info', '音频浏览按钮点击');
                 this.audioInput.click();
             });
             console.log('音频浏览按钮事件绑定成功');
@@ -220,6 +244,7 @@ class LyricTranslatorApp {
         if (this.audioInput) {
             this.audioInput.addEventListener('change', (e) => {
                 console.log('音频文件选择事件触发');
+                this.log('info', '音频文件选择事件触发');
                 this.handleAudioSelect(e);
             });
             console.log('音频输入事件绑定成功');
@@ -230,6 +255,7 @@ class LyricTranslatorApp {
         if (this.removeAudioBtn) {
             this.removeAudioBtn.addEventListener('click', () => {
                 console.log('移除音频按钮点击');
+                this.log('info', '移除音频按钮点击');
                 this.removeAudio();
             });
             console.log('移除音频按钮事件绑定成功');
@@ -240,6 +266,7 @@ class LyricTranslatorApp {
         if (this.generateWordByWordBtn) {
             this.generateWordByWordBtn.addEventListener('click', () => {
                 console.log('生成逐字歌词按钮点击');
+                this.log('info', '生成逐字歌词按钮点击');
                 this.generateWordByWordLyrics();
             });
             console.log('生成逐字歌词按钮事件绑定成功');
@@ -251,6 +278,7 @@ class LyricTranslatorApp {
         if (this.audioUploadArea) {
             this.audioUploadArea.addEventListener('dragenter', (e) => {
                 console.log('音频拖放进入事件触发');
+                this.log('info', '音频拖放进入事件触发');
                 e.preventDefault();
                 e.stopPropagation();
                 this.audioUploadArea.classList.add('dragover');
@@ -258,6 +286,7 @@ class LyricTranslatorApp {
             
             this.audioUploadArea.addEventListener('dragover', (e) => {
                 console.log('音频拖放悬停事件触发');
+                this.log('info', '音频拖放悬停事件触发');
                 e.preventDefault();
                 e.stopPropagation();
                 this.audioUploadArea.classList.add('dragover');
@@ -265,6 +294,7 @@ class LyricTranslatorApp {
             
             this.audioUploadArea.addEventListener('dragleave', (e) => {
                 console.log('音频拖放离开事件触发');
+                this.log('info', '音频拖放离开事件触发');
                 e.preventDefault();
                 e.stopPropagation();
                 this.audioUploadArea.classList.remove('dragover');
@@ -272,6 +302,7 @@ class LyricTranslatorApp {
             
             this.audioUploadArea.addEventListener('drop', (e) => {
                 console.log('音频拖放放下事件触发');
+                this.log('info', '音频拖放放下事件触发');
                 e.preventDefault();
                 e.stopPropagation();
                 this.audioUploadArea.classList.remove('dragover');
@@ -287,6 +318,7 @@ class LyricTranslatorApp {
             this.tabBtns.forEach((btn, index) => {
                 btn.addEventListener('click', (e) => {
                     console.log('标签切换事件触发，标签索引:', index);
+                    this.log('info', `标签切换事件触发，标签索引: ${index}`);
                     this.switchTab(e);
                 });
             });
@@ -299,6 +331,7 @@ class LyricTranslatorApp {
         if (this.downloadBtn) {
             this.downloadBtn.addEventListener('click', () => {
                 console.log('下载按钮点击');
+                this.log('info', '下载按钮点击');
                 this.downloadTranslatedLyrics();
             });
             console.log('下载按钮事件绑定成功');
@@ -308,6 +341,127 @@ class LyricTranslatorApp {
         
         // 批量功能事件
         this.bindBatchEvents();
+        
+        // 控制台事件
+        if (this.toggleConsoleBtn) {
+            this.toggleConsoleBtn.addEventListener('click', () => {
+                this.toggleConsole();
+            });
+            console.log('控制台切换事件绑定成功');
+        }
+        
+        if (this.clearLogBtn) {
+            this.clearLogBtn.addEventListener('click', () => {
+                this.clearLog();
+            });
+            console.log('清空日志事件绑定成功');
+        }
+        
+        // 初始化控制台和代理检测
+        this.initConsole();
+        this.checkProxyStatus();
+    }
+    
+    /**
+     * 初始化控制台
+     */
+    initConsole() {
+        this.log('info', '控制台初始化完成');
+        this.log('info', '歌词翻译工具启动');
+    }
+    
+    /**
+     * 切换控制台显示/隐藏
+     */
+    toggleConsole() {
+        if (!this.consoleContainer) return;
+        
+        this.consoleContainer.classList.toggle('collapsed');
+        const isCollapsed = this.consoleContainer.classList.contains('collapsed');
+        this.toggleConsoleBtn.textContent = isCollapsed ? '展开' : '收起';
+        
+        this.log('info', `控制台${isCollapsed ? '收起' : '展开'}`);
+    }
+    
+    /**
+     * 清空控制台日志
+     */
+    clearLog() {
+        if (!this.consoleLog) return;
+        this.consoleLog.innerHTML = '';
+        this.log('info', '日志已清空');
+    }
+    
+    /**
+     * 记录日志到控制台
+     * @param {string} type - 日志类型：info, success, error, warning
+     * @param {string} message - 日志消息
+     */
+    log(type, message) {
+        if (!this.consoleLog) return;
+        
+        // 获取当前时间
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('zh-CN');
+        
+        // 创建日志元素
+        const logDiv = document.createElement('div');
+        logDiv.className = `log-${type}`;
+        logDiv.innerHTML = `<span class="log-time">${timeStr}</span>${message}`;
+        
+        // 添加到控制台
+        this.consoleLog.appendChild(logDiv);
+        
+        // 滚动到底部
+        this.consoleLog.scrollTop = this.consoleLog.scrollHeight;
+    }
+    
+    /**
+     * 检查代理服务器状态
+     */
+    async checkProxyStatus() {
+        if (!this.proxyStatus) return;
+        
+        this.proxyStatus.textContent = '代理状态：检查中...';
+        this.proxyStatus.className = 'status-indicator checking';
+        this.log('info', '开始检查代理服务器状态');
+        
+        try {
+            // 使用 AbortController 实现超时
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
+            // 检查代理服务器
+            const proxyUrl = 'http://localhost:3001/translate';
+            const response = await fetch(proxyUrl, {
+                method: 'HEAD',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+                this.proxyStatus.textContent = '代理状态：在线';
+                this.proxyStatus.className = 'status-indicator online';
+                this.log('success', '代理服务器在线，可以正常使用翻译功能');
+            } else {
+                throw new Error(`代理服务器响应错误: ${response.status}`);
+            }
+        } catch (error) {
+            this.proxyStatus.textContent = '代理状态：离线';
+            this.proxyStatus.className = 'status-indicator offline';
+            
+            if (error.name === 'AbortError') {
+                this.log('warning', '代理服务器检测超时，可能离线或网络连接问题');
+            } else {
+                this.log('error', `代理服务器检测失败: ${error.message}`);
+            }
+            
+            // 添加用户操作提示
+            this.log('warning', '请在项目根目录执行 npm start 启动代理服务器');
+            this.log('info', '启动后代理服务器将运行在 http://localhost:3001/translate');
+            this.log('info', '启动命令：npm start');
+        }
     }
     
 
@@ -1096,27 +1250,36 @@ class LyricTranslatorApp {
     async translateLyrics() {
         if (this.uploadedFiles.length === 0) {
             alert('请先上传歌词文件');
+            this.log('warning', '翻译尝试失败：未上传歌词文件');
             return;
         }
         
         this.showLoading();
+        this.log('info', '开始翻译歌词');
         
         try {
             // 处理当前文件
             const file = this.uploadedFiles[this.currentFileIndex];
+            this.log('info', `处理文件: ${file.name}`);
+            
             const text = await FileUtils.readFile(file);
+            this.log('success', '文件读取成功');
             
             // 解析文件
+            this.log('info', '开始解析文件');
             const parseResult = this.parserManager.parse(text);
             this.parsedData = parseResult.data;
             this.parser = parseResult.parser;
+            this.log('success', `文件解析成功，格式: ${parseResult.format}`);
             
             // 翻译歌词行
             if (this.parsedData.lyricLines) {
+                this.log('info', `开始翻译 ${this.parsedData.lyricLines.length} 行歌词`);
                 this.parsedData.lyricLines = await this.aiService.translateLyricLines(
                     this.parsedData.lyricLines, 
                     this.targetLang.value
                 );
+                this.log('success', '歌词行翻译完成');
             } else {
                 // 其他格式的翻译逻辑
                 let textToTranslate = '';
@@ -1126,14 +1289,17 @@ class LyricTranslatorApp {
                     // SRT 格式
                     textElements = this.parsedData.subtitleLines;
                     textToTranslate = textElements.map(sub => sub.textLines.join('\n')).join('\n\n');
+                    this.log('info', `开始翻译 ${textElements.length} 个字幕`);
                 } else if (this.parsedData.subtitles) {
                     // ASS 格式
                     textElements = this.parsedData.subtitles;
                     textToTranslate = textElements.map(sub => sub.text).join('\n\n');
+                    this.log('info', `开始翻译 ${textElements.length} 个字幕`);
                 } else if (this.parsedData.textLines) {
                     // TXT 格式
                     textElements = this.parsedData.textLines;
                     textToTranslate = textElements.map(line => line.text).join('\n');
+                    this.log('info', `开始翻译 ${textElements.length} 行文本`);
                 }
                 
                 // 调用翻译服务
@@ -1142,16 +1308,30 @@ class LyricTranslatorApp {
                     this.targetLang.value, 
                     this.sourceLang.value
                 );
+                this.log('success', '文本翻译完成');
                 
                 // 合并翻译结果
                 this.mergeTranslationResults(textElements, translatedText);
+                this.log('success', '翻译结果合并完成');
             }
             
             // 显示结果
             this.showResults(text);
+            this.log('success', '翻译结果显示完成');
         } catch (error) {
             console.error('翻译失败:', error);
-            alert(`翻译失败: ${error.message}\n请检查文件格式或重试`);
+            this.log('error', `翻译失败: ${error.message}`);
+            
+            // 添加更友好的用户提示
+            let userMessage = `翻译失败: ${error.message}`;
+            
+            if (error.message.includes('跨域错误') || error.message.includes('Failed to fetch')) {
+                userMessage += '\n\n请确保已在项目根目录执行 npm start 启动本地代理服务器';
+                userMessage += '\n启动命令：npm start';
+                userMessage += '\n启动后代理服务器将运行在 http://localhost:3001/translate';
+            }
+            
+            alert(userMessage);
         } finally {
             this.hideLoading();
         }
