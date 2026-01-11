@@ -584,10 +584,12 @@ class AIService {
         let translateIndex = 0;
         return lyricLines.map(line => {
             if (line.type === 'lyric' || line.type === 'text') {
-                return {
+                const result = {
                     ...line,
                     translatedText: translatedLines[translateIndex] || line.text
                 };
+                translateIndex++;
+                return result;
             }
             return line;
         });
