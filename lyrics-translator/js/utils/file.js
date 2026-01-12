@@ -48,12 +48,12 @@ class FileUtils {
     }
 
     /**
-     * 创建下载链接
+     * 下载文件
      * @param {string} content - 文件内容
      * @param {string} filename - 文件名
-     * @returns {string} - 下载链接
+     * @returns {void}
      */
-    static createDownloadLink(content, filename) {
+    static downloadFile(content, filename) {
         const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

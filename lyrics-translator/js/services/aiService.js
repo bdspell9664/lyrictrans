@@ -49,6 +49,40 @@ class AIService {
     }
 
     /**
+     * 检测是否为移动设备
+     * @returns {boolean} - 是否为移动设备
+     */
+    isMobileDevice() {
+        if (typeof navigator === 'undefined') return false;
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    }
+    
+    /**
+     * 获取用户友好的错误消息
+     * @param {Error} error - 原始错误对象
+     * @returns {string} - 用户友好的错误消息
+     */
+    getUserFriendlyErrorMessage(error) {
+        const isMobile = this.isMobileDevice();
+        
+        if (error.message.includes('CORS') || error.message.includes('cross-origin')) {
+            return isMobile ? 
+                '翻译请求失败：跨域错误。请确保您的网络环境允许访问翻译服务，或尝试在电脑上使用此工具。' :
+                '翻译请求失败：跨域错误。请启动本地代理服务器后重试。在项目根目录执行：npm start';
+        } else if (error.name === 'AbortError') {
+            return '翻译请求超时。请检查网络连接或稍后重试。';
+        } else if (error.message.includes('Failed to fetch')) {
+            return isMobile ? 
+                '翻译请求失败：无法连接到服务器。请检查您的网络连接，或尝试在电脑上使用此工具。' :
+                '翻译请求失败：无法连接到服务器。请确保本地代理服务器已启动，或检查网络连接。';
+        } else if (error.message.includes('百度翻译API错误')) {
+            return `翻译服务错误：${error.message.replace('百度翻译API错误: ', '')}`;
+        }
+        
+        return `翻译失败：${error.message}`;
+    }
+    
+    /**
      * 使用百度翻译API进行翻译
      * @param {string} text - 要翻译的文本
      * @param {string} targetLang - 目标语言
@@ -97,7 +131,8 @@ class AIService {
         const requestOptions = {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': navigator.userAgent || 'LyricsTranslator/1.0'
             },
             body: new URLSearchParams({
                 q: text,
@@ -109,41 +144,60 @@ class AIService {
             })
         };
 
-        // 使用 AbortController 实现超时处理
-        const createRequestWithTimeout = (url) => {
+        // 检查是否支持 AbortController
+        let requestInfo = null;
+        let useAbortController = typeof AbortController !== 'undefined';
+        
+        if (useAbortController) {
+            // 使用 AbortController 实现超时处理
             const controller = new AbortController();
             const timeoutId = setTimeout(() => {
                 controller.abort();
-            }, 10000); // 10秒超时
+            }, 15000); // 15秒超时，给移动设备更多时间
             
-            return {
+            requestInfo = {
                 options: {
                     ...requestOptions,
                     signal: controller.signal
                 },
                 timeoutId
             };
-        };
+        } else {
+            // 不支持 AbortController 的浏览器，使用普通请求
+            requestInfo = {
+                options: requestOptions,
+                timeoutId: null
+            };
+        }
 
         try {
-            // 检查代理服务器是否可用
-            const isProxyAvailable = await this.checkProxyAvailability(proxyUrl);
             let response;
-            let requestInfo;
+            const isMobile = this.isMobileDevice();
             
-            if (isProxyAvailable) {
-                // 代理服务器可用，使用代理
-                requestInfo = createRequestWithTimeout(proxyUrl);
-                console.log('发送翻译请求到代理服务器:', proxyUrl);
-                response = await fetch(proxyUrl, requestInfo.options);
+            // 移动设备优先尝试直接调用API，电脑设备优先使用代理
+            if (!isMobile) {
+                // 检查代理服务器是否可用
+                const isProxyAvailable = await this.checkProxyAvailability(proxyUrl);
+                
+                if (isProxyAvailable) {
+                    // 代理服务器可用，使用代理
+                    console.log('发送翻译请求到代理服务器:', proxyUrl);
+                    response = await fetch(proxyUrl, requestInfo.options);
+                } else {
+                    // 代理服务器不可用，尝试直接调用API
+                    console.log('代理服务器不可用，尝试直接调用百度翻译API:', directApiUrl);
+                    response = await fetch(directApiUrl, requestInfo.options);
+                }
             } else {
-                // 代理服务器不可用，尝试直接调用API
-                requestInfo = createRequestWithTimeout(directApiUrl);
-                console.log('代理服务器不可用，尝试直接调用百度翻译API:', directApiUrl);
+                // 移动设备直接调用百度API
+                console.log('移动设备，直接调用百度翻译API:', directApiUrl);
                 response = await fetch(directApiUrl, requestInfo.options);
             }
             
-            clearTimeout(requestInfo.timeoutId); // 清除超时定时器
+            // 清除超时定时器
+            if (requestInfo.timeoutId) {
+                clearTimeout(requestInfo.timeoutId);
+            }
             
             console.log('翻译请求响应状态:', response.status);
             
@@ -173,16 +227,9 @@ class AIService {
             console.error('百度翻译请求失败:', error.message);
             console.error('完整错误信息:', error);
             
-            // 检查是否是跨域错误
-            if (error.message.includes('CORS') || error.message.includes('cross-origin')) {
-                throw new Error('翻译请求失败：跨域错误。请启动本地代理服务器后重试。在项目根目录执行：npm start');
-            } else if (error.name === 'AbortError') {
-                throw new Error('翻译请求超时。请检查网络连接或尝试重启代理服务器。');
-            } else if (error.message.includes('Failed to fetch')) {
-                throw new Error('翻译请求失败：无法连接到服务器。请确保本地代理服务器已启动，或检查网络连接。');
-            }
-            
-            throw error;
+            // 转换为用户友好的错误消息
+            const userFriendlyError = this.getUserFriendlyErrorMessage(error);
+            throw new Error(userFriendlyError);
         }
     }
     

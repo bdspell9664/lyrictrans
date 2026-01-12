@@ -14,6 +14,9 @@
                     <h1>歌词翻译工具</h1>
                     <p>支持多种歌词格式，借助AI轻松翻译</p>
                 </div>
+                <div class="version-info">
+                    <span>版本: 1.0.0</span>
+                </div>
             </div>
         </header>
 
@@ -140,6 +143,7 @@
                 <div class="result-tabs">
                     <button class="tab-btn active" data-tab="original">原文</button>
                     <button class="tab-btn" data-tab="translated">译文</button>
+                    <button class="tab-btn" data-tab="wordByWord">逐字歌词</button>
                 </div>
                 <div class="result-content">
                     <div class="tab-panel active" id="originalPanel">
@@ -147,6 +151,46 @@
                     </div>
                     <div class="tab-panel" id="translatedPanel">
                         <pre id="translatedLyrics"></pre>
+                    </div>
+                    <div class="tab-panel" id="wordByWordPanel">
+                        <!-- 逐字歌词播放区域 -->
+                        <div class="word-by-word-player">
+                            <div class="karaoke-display">
+                                <div class="karaoke-text" id="karaokeText">
+                                    <p class="current-line" id="currentLine">-- 等待播放 --</p>
+                                    <p class="next-line" id="nextLine"></p>
+                                </div>
+                            </div>
+                            
+                            <!-- 音频控制 -->
+                            <div class="audio-controls">
+                                <button class="audio-btn" id="playBtn">▶ 播放</button>
+                                <button class="audio-btn" id="pauseBtn" style="display: none;">⏸ 暂停</button>
+                                <button class="audio-btn" id="stopBtn">⏹ 停止</button>
+                                <input type="range" id="progressSlider" class="progress-slider" min="0" max="100" value="0">
+                                <span class="time-display" id="timeDisplay">00:00 / 00:00</span>
+                                <select id="playbackSpeed" class="speed-select">
+                                    <option value="0.5">0.5x</option>
+                                    <option value="0.75">0.75x</option>
+                                    <option value="1" selected>1.0x</option>
+                                    <option value="1.25">1.25x</option>
+                                    <option value="1.5">1.5x</option>
+                                    <option value="2">2.0x</option>
+                                </select>
+                            </div>
+                            
+                            <!-- 逐字编辑区域 -->
+                            <div class="word-editor-section" style="margin-top: 2rem;">
+                                <h3>歌词编辑</h3>
+                                <div class="timeline-editor" id="timelineEditor">
+                                    <!-- 时间轴编辑界面将通过JS动态生成 -->
+                                </div>
+                                <div class="editor-controls">
+                                    <button class="btn btn-small" id="saveTimelineBtn">保存时间轴</button>
+                                    <button class="btn btn-small" id="resetTimelineBtn">重置时间轴</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="download-options" style="margin: 1rem 0;">
@@ -169,6 +213,24 @@
             <div class="loading-content">
                 <div class="spinner"></div>
                 <p>正在翻译，请稍候...</p>
+            </div>
+        </div>
+        
+        <!-- 下载进度 -->
+        <div class="download-progress" id="downloadProgress" style="display: none;">
+            <div class="download-progress-content">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <p id="progressText">正在下载...</p>
+            </div>
+        </div>
+        
+        <!-- 通知 -->
+        <div class="notification" id="notification" style="display: none;">
+            <div class="notification-content">
+                <span id="notificationText"></span>
+                <button class="notification-close" id="notificationClose">×</button>
             </div>
         </div>
         

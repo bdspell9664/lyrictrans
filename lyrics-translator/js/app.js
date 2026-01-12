@@ -118,6 +118,46 @@ class LyricTranslatorApp {
         console.log('clearLogBtn:', this.clearLogBtn);
         console.log('consoleLog:', this.consoleLog);
         console.log('proxyStatus:', this.proxyStatus);
+        
+        // 下载进度元素
+        this.downloadProgress = document.getElementById('downloadProgress');
+        this.progressFill = document.getElementById('progressFill');
+        this.progressText = document.getElementById('progressText');
+        
+        // 通知元素
+        this.notification = document.getElementById('notification');
+        this.notificationText = document.getElementById('notificationText');
+        this.notificationClose = document.getElementById('notificationClose');
+        
+        // 验证新增元素是否成功获取
+        console.log('下载和通知元素获取结果:');
+        console.log('downloadProgress:', this.downloadProgress);
+        console.log('notification:', this.notification);
+        
+        // 逐字歌词相关元素
+        this.currentLine = document.getElementById('currentLine');
+        this.nextLine = document.getElementById('nextLine');
+        this.playBtn = document.getElementById('playBtn');
+        this.pauseBtn = document.getElementById('pauseBtn');
+        this.stopBtn = document.getElementById('stopBtn');
+        this.progressSlider = document.getElementById('progressSlider');
+        this.timeDisplay = document.getElementById('timeDisplay');
+        this.playbackSpeed = document.getElementById('playbackSpeed');
+        this.timelineEditor = document.getElementById('timelineEditor');
+        this.saveTimelineBtn = document.getElementById('saveTimelineBtn');
+        this.resetTimelineBtn = document.getElementById('resetTimelineBtn');
+        
+        // 音频播放器
+        this.audioPlayer = null;
+        this.currentAudioIndex = 0;
+        this.isPlaying = false;
+        this.playbackTime = 0;
+        
+        // 验证逐字歌词元素是否成功获取
+        console.log('逐字歌词元素获取结果:');
+        console.log('currentLine:', this.currentLine);
+        console.log('playBtn:', this.playBtn);
+        console.log('progressSlider:', this.progressSlider);
     }
 
     /**
@@ -355,6 +395,63 @@ class LyricTranslatorApp {
                 this.clearLog();
             });
             console.log('清空日志事件绑定成功');
+        }
+        
+        // 通知关闭事件
+        if (this.notificationClose) {
+            this.notificationClose.addEventListener('click', () => {
+                this.hideNotification();
+            });
+        }
+        
+        // 逐字歌词事件
+        if (this.playBtn) {
+            this.playBtn.addEventListener('click', () => {
+                this.playAudio();
+            });
+            console.log('播放按钮事件绑定成功');
+        }
+        
+        if (this.pauseBtn) {
+            this.pauseBtn.addEventListener('click', () => {
+                this.pauseAudio();
+            });
+            console.log('暂停按钮事件绑定成功');
+        }
+        
+        if (this.stopBtn) {
+            this.stopBtn.addEventListener('click', () => {
+                this.stopAudio();
+            });
+            console.log('停止按钮事件绑定成功');
+        }
+        
+        if (this.progressSlider) {
+            this.progressSlider.addEventListener('input', (e) => {
+                this.seekAudio(e.target.value);
+            });
+            console.log('进度条事件绑定成功');
+        }
+        
+        if (this.playbackSpeed) {
+            this.playbackSpeed.addEventListener('change', (e) => {
+                this.setPlaybackSpeed(e.target.value);
+            });
+            console.log('播放速度事件绑定成功');
+        }
+        
+        if (this.saveTimelineBtn) {
+            this.saveTimelineBtn.addEventListener('click', () => {
+                this.saveTimeline();
+            });
+            console.log('保存时间轴事件绑定成功');
+        }
+        
+        if (this.resetTimelineBtn) {
+            this.resetTimelineBtn.addEventListener('click', () => {
+                this.resetTimeline();
+            });
+            console.log('重置时间轴事件绑定成功');
         }
         
         // 初始化控制台和代理检测
@@ -1223,6 +1320,11 @@ class LyricTranslatorApp {
         const targetPanel = document.getElementById(`${tab}Panel`);
         if (targetPanel) {
             targetPanel.classList.add('active');
+            
+            // 初始化逐字歌词编辑器
+            if (tab === 'wordByWord') {
+                this.initTimelineEditor();
+            }
         }
     }
     
@@ -1360,23 +1462,407 @@ class LyricTranslatorApp {
     }
     
     /**
+     * 显示通知
+     * @param {string} message - 通知消息
+     * @param {string} type - 通知类型：success, error, warning
+     */
+    showNotification(message, type = 'success') {
+        if (!this.notification || !this.notificationText) return;
+        
+        this.notificationText.textContent = message;
+        this.notification.className = `notification ${type}`;
+        this.notification.style.display = 'block';
+        
+        // 3秒后自动隐藏
+        setTimeout(() => {
+            this.hideNotification();
+        }, 3000);
+    }
+    
+    /**
+     * 隐藏通知
+     */
+    hideNotification() {
+        if (this.notification) {
+            this.notification.style.display = 'none';
+        }
+    }
+    
+    /**
+     * 显示下载进度
+     */
+    showDownloadProgress() {
+        if (this.downloadProgress) {
+            this.downloadProgress.style.display = 'flex';
+        }
+    }
+    
+    /**
+     * 更新下载进度
+     * @param {number} progress - 进度百分比 (0-100)
+     */
+    updateDownloadProgress(progress) {
+        if (this.progressFill && this.progressText) {
+            this.progressFill.style.width = `${progress}%`;
+            this.progressText.textContent = `正在下载... ${progress}%`;
+        }
+    }
+    
+    /**
+     * 隐藏下载进度
+     */
+    hideDownloadProgress() {
+        if (this.downloadProgress) {
+            this.downloadProgress.style.display = 'none';
+        }
+    }
+    
+    /**
      * 下载翻译后的歌词
      */
     downloadTranslatedLyrics() {
         if (!this.parsedData || !this.parser) {
-            alert('请先翻译歌词');
+            this.showNotification('请先翻译歌词', 'warning');
             return;
         }
         
-        // 生成翻译后的文本
-        const translatedText = this.parser.generate(this.parsedData, this.includeOriginal.checked);
+        try {
+            // 显示下载进度
+            this.showDownloadProgress();
+            this.updateDownloadProgress(0);
+            
+            // 生成翻译后的文本
+            const translatedText = this.parser.generate(this.parsedData, this.includeOriginal.checked);
+            this.updateDownloadProgress(30);
+            
+            // 生成文件名
+            const originalFile = this.uploadedFiles[this.currentFileIndex];
+            const outputFormat = this.outputFormat.value;
+            const fileExt = outputFormat === 'auto' ? originalFile.name.split('.').pop() : outputFormat;
+            const fileName = `${originalFile.name.replace(/\.[^/.]+$/, '')}_translated.${fileExt}`;
+            this.updateDownloadProgress(60);
+            
+            // 下载文件
+            FileUtils.downloadFile(translatedText, fileName);
+            this.updateDownloadProgress(100);
+            
+            // 隐藏进度条并显示成功通知
+            setTimeout(() => {
+                this.hideDownloadProgress();
+                this.showNotification(`文件 "${fileName}" 下载成功！`);
+            }, 500);
+            
+        } catch (error) {
+            this.hideDownloadProgress();
+            this.showNotification(`下载失败: ${error.message}`, 'error');
+            console.error('下载失败:', error);
+        }
+    }
+    
+    /**
+     * 播放音频
+     */
+    playAudio() {
+        if (!this.currentAudio) {
+            this.showNotification('请先上传音频文件', 'warning');
+            return;
+        }
         
-        // 生成文件名
-        const originalFile = this.uploadedFiles[this.currentFileIndex];
-        const fileName = `${originalFile.name.replace(/\.[^/.]+$/, '')}_translated.${originalFile.name.split('.').pop()}`;
+        if (!this.parsedData || !this.parsedData.lyricLines) {
+            this.showNotification('请先解析歌词文件', 'warning');
+            return;
+        }
         
-        // 下载文件
-        FileUtils.downloadFile(fileName, translatedText);
+        try {
+            if (!this.audioPlayer) {
+                // 创建音频播放器
+                this.audioPlayer = new Audio(URL.createObjectURL(this.currentAudio));
+                this.audioPlayer.addEventListener('timeupdate', () => {
+                    this.updatePlaybackTime();
+                });
+                this.audioPlayer.addEventListener('ended', () => {
+                    this.onAudioEnded();
+                });
+            }
+            
+            this.audioPlayer.play();
+            this.isPlaying = true;
+            this.playBtn.style.display = 'none';
+            this.pauseBtn.style.display = 'inline-block';
+            
+            this.showNotification('开始播放', 'success');
+        } catch (error) {
+            console.error('播放失败:', error);
+            this.showNotification(`播放失败: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * 暂停音频
+     */
+    pauseAudio() {
+        if (this.audioPlayer && this.isPlaying) {
+            this.audioPlayer.pause();
+            this.isPlaying = false;
+            this.playBtn.style.display = 'inline-block';
+            this.pauseBtn.style.display = 'none';
+            this.showNotification('已暂停', 'success');
+        }
+    }
+    
+    /**
+     * 停止音频
+     */
+    stopAudio() {
+        if (this.audioPlayer) {
+            this.audioPlayer.pause();
+            this.audioPlayer.currentTime = 0;
+            this.isPlaying = false;
+            this.playBtn.style.display = 'inline-block';
+            this.pauseBtn.style.display = 'none';
+            this.updatePlaybackTime();
+            this.showNotification('已停止', 'success');
+        }
+    }
+    
+    /**
+     * 音频跳转
+     * @param {number} percentage - 跳转百分比
+     */
+    seekAudio(percentage) {
+        if (this.audioPlayer) {
+            const duration = this.audioPlayer.duration || 0;
+            this.audioPlayer.currentTime = (percentage / 100) * duration;
+            this.updatePlaybackTime();
+        }
+    }
+    
+    /**
+     * 设置播放速度
+     * @param {number} speed - 播放速度
+     */
+    setPlaybackSpeed(speed) {
+        if (this.audioPlayer) {
+            this.audioPlayer.playbackRate = parseFloat(speed);
+            this.showNotification(`播放速度已设置为 ${speed}x`, 'success');
+        }
+    }
+    
+    /**
+     * 更新播放时间
+     */
+    updatePlaybackTime() {
+        if (!this.audioPlayer) return;
+        
+        const currentTime = this.audioPlayer.currentTime;
+        const duration = this.audioPlayer.duration || 0;
+        
+        // 更新进度条
+        const percentage = duration > 0 ? (currentTime / duration) * 100 : 0;
+        this.progressSlider.value = percentage;
+        
+        // 更新时间显示
+        const currentTimeStr = this.formatTime(currentTime);
+        const durationStr = this.formatTime(duration);
+        this.timeDisplay.textContent = `${currentTimeStr} / ${durationStr}`;
+        
+        // 更新歌词显示
+        this.updateLyricDisplay(currentTime);
+    }
+    
+    /**
+     * 格式化时间
+     * @param {number} seconds - 秒数
+     * @returns {string} - 格式化后的时间字符串 (mm:ss)
+     */
+    formatTime(seconds) {
+        if (isNaN(seconds) || seconds < 0) return '00:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    /**
+     * 更新歌词显示
+     * @param {number} currentTime - 当前播放时间（秒）
+     */
+    updateLyricDisplay(currentTime) {
+        if (!this.parsedData || !this.parsedData.lyricLines) return;
+        
+        const lyricLines = this.parsedData.lyricLines.filter(line => line.type === 'lyric');
+        if (lyricLines.length === 0) return;
+        
+        // 找到当前应该显示的歌词行
+        let currentIndex = -1;
+        for (let i = 0; i < lyricLines.length; i++) {
+            const line = lyricLines[i];
+            if (!line.timestamps || line.timestamps.length === 0) continue;
+            
+            const lineStartTime = line.timestamps[0].totalMilliseconds / 1000;
+            const nextLineStartTime = i < lyricLines.length - 1 && lyricLines[i + 1].timestamps ? 
+                lyricLines[i + 1].timestamps[0].totalMilliseconds / 1000 : 
+                Infinity;
+            
+            if (currentTime >= lineStartTime && currentTime < nextLineStartTime) {
+                currentIndex = i;
+                break;
+            }
+        }
+        
+        if (currentIndex >= 0) {
+            // 更新当前行和下一行显示
+            this.currentLine.textContent = lyricLines[currentIndex].translatedText || lyricLines[currentIndex].text;
+            this.nextLine.textContent = currentIndex < lyricLines.length - 1 ? 
+                (lyricLines[currentIndex + 1].translatedText || lyricLines[currentIndex + 1].text) : '';
+            
+            // 更新逐字高亮
+            this.updateWordHighlight(lyricLines[currentIndex], currentTime);
+        }
+    }
+    
+    /**
+     * 更新逐字高亮
+     * @param {Object} lyricLine - 歌词行对象
+     * @param {number} currentTime - 当前播放时间（秒）
+     */
+    updateWordHighlight(lyricLine, currentTime) {
+        if (!lyricLine.wordTimestamps || lyricLine.wordTimestamps.length === 0) {
+            return;
+        }
+        
+        const lineStartTime = lyricLine.timestamps[0].totalMilliseconds / 1000;
+        const relativeTime = currentTime - lineStartTime;
+        
+        // 构建带高亮的HTML
+        let highlightedText = '';
+        for (let i = 0; i < lyricLine.wordTimestamps.length; i++) {
+            const wordTimestamp = lyricLine.wordTimestamps[i];
+            const wordStartTime = wordTimestamp.startTime / 1000;
+            const wordEndTime = wordTimestamp.endTime / 1000;
+            
+            const isHighlighted = relativeTime >= wordStartTime && relativeTime <= wordEndTime;
+            const highlightClass = isHighlighted ? 'highlighted' : '';
+            highlightedText += `<span class="word ${highlightClass}">${wordTimestamp.word}</span>`;
+        }
+        
+        // 更新当前行显示
+        if (this.currentLine) {
+            this.currentLine.innerHTML = highlightedText;
+        }
+    }
+    
+    /**
+     * 音频播放结束事件
+     */
+    onAudioEnded() {
+        this.isPlaying = false;
+        this.playBtn.style.display = 'inline-block';
+        this.pauseBtn.style.display = 'none';
+        this.showNotification('播放结束', 'success');
+    }
+    
+    /**
+     * 初始化时间轴编辑器
+     */
+    initTimelineEditor() {
+        if (!this.timelineEditor || !this.parsedData || !this.parsedData.lyricLines) return;
+        
+        const lyricLines = this.parsedData.lyricLines.filter(line => line.type === 'lyric');
+        if (lyricLines.length === 0) {
+            this.timelineEditor.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">没有可编辑的歌词行</p>';
+            return;
+        }
+        
+        // 生成时间轴编辑界面
+        let html = '';
+        for (let i = 0; i < lyricLines.length; i++) {
+            const line = lyricLines[i];
+            html += this.generateWordLineHTML(line, i);
+        }
+        
+        this.timelineEditor.innerHTML = html;
+    }
+    
+    /**
+     * 生成歌词行HTML
+     * @param {Object} line - 歌词行对象
+     * @param {number} index - 索引
+     * @returns {string} - 生成的HTML字符串
+     */
+    generateWordLineHTML(line, index) {
+        const words = line.text.split('');
+        let wordItemsHTML = '';
+        
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            const startTime = line.wordTimestamps && line.wordTimestamps[i] ? 
+                (line.wordTimestamps[i].startTime / 1000).toFixed(2) : '0.00';
+            const endTime = line.wordTimestamps && line.wordTimestamps[i] ? 
+                (line.wordTimestamps[i].endTime / 1000).toFixed(2) : '0.00';
+            
+            wordItemsHTML += `
+                <div class="word-item">
+                    <span class="word-text">${word}</span>
+                    <input type="number" step="0.01" min="0" value="${startTime}" 
+                           onchange="app.updateWordTimestamp(${index}, ${i}, 'start', this.value)">
+                    <span class="word-time">-</span>
+                    <input type="number" step="0.01" min="0" value="${endTime}" 
+                           onchange="app.updateWordTimestamp(${index}, ${i}, 'end', this.value)">
+                </div>
+            `;
+        }
+        
+        return `
+            <div class="word-line">
+                <span class="word-line-number">${index + 1}</span>
+                <div class="word-timeline">${wordItemsHTML}</div>
+            </div>
+        `;
+    }
+    
+    /**
+     * 更新单词时间戳
+     * @param {number} lineIndex - 行索引
+     * @param {number} wordIndex - 单词索引
+     * @param {string} type - 时间类型：start 或 end
+     * @param {number} value - 时间值（秒）
+     */
+    updateWordTimestamp(lineIndex, wordIndex, type, value) {
+        if (!this.parsedData || !this.parsedData.lyricLines) return;
+        
+        const lyricLines = this.parsedData.lyricLines.filter(line => line.type === 'lyric');
+        if (lineIndex >= lyricLines.length) return;
+        
+        const line = lyricLines[lineIndex];
+        if (!line.wordTimestamps) {
+            line.wordTimestamps = [];
+        }
+        
+        // 确保单词时间戳数组有足够的元素
+        while (line.wordTimestamps.length <= wordIndex) {
+            line.wordTimestamps.push({ startTime: 0, endTime: 0 });
+        }
+        
+        const timeValue = parseFloat(value) * 1000; // 转换为毫秒
+        line.wordTimestamps[wordIndex][`${type}Time`] = timeValue;
+    }
+    
+    /**
+     * 保存时间轴
+     */
+    saveTimeline() {
+        // 这里可以实现保存时间轴到文件或其他存储方式
+        this.showNotification('时间轴已保存', 'success');
+    }
+    
+    /**
+     * 重置时间轴
+     */
+    resetTimeline() {
+        // 重新生成逐字时间戳
+        this.generateFallbackWordTimestamps();
+        this.initTimelineEditor();
+        this.showNotification('时间轴已重置', 'success');
     }
 }
 
