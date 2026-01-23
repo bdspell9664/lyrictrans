@@ -2,14 +2,19 @@
 
 ## 1. 功能概述
 
-本歌词翻译工具提供了两个核心功能：
+本歌词翻译工具提供了三个核心功能：
 
 ### 1.1 网页端代理加速器
 - 可部署至GitHub Pages，独立于本地TRAE CN应用运行
-- 使用Cloudflare Workers作为代理服务器，解决跨域问题
+- 使用多种代理方式：Cloudflare Workers或GitHub Pages Service Worker
 - 在关闭TRAE CN应用后仍能正常使用代理服务
 
-### 1.2 百度翻译API密钥持久化
+### 1.2 GitHub Pages代理服务
+- 基于Service Worker的代理服务，可直接部署到GitHub Pages
+- 无需额外的服务器资源，完全免费
+- 解决跨域问题，支持浏览器直接调用百度翻译API
+
+### 1.3 百度翻译API密钥持久化
 - 自动保存百度翻译API密钥，消除每次使用时手动输入
 - 提供安全的密钥存储机制
 - 支持便捷的密钥管理界面
@@ -57,13 +62,44 @@
    ```
 3. 保存文件并部署到GitHub Pages
 
-## 4. GitHub Pages部署
+## 4. GitHub Pages代理服务部署
 
 ### 4.1 准备GitHub仓库
+1. 创建一个新的GitHub仓库（如：`lyrics-translator-proxy`）
+2. 克隆仓库到本地
+
+### 4.2 部署代理服务
+1. 将项目中`github-proxy`目录下的所有文件复制到新建的仓库中
+2. 推送文件到GitHub仓库
+3. 进入仓库「Settings」页面，导航到「Pages」配置
+4. 选择「Source」为「Deploy from a branch」
+5. 选择「Branch」为「main」或「master」，点击「Save」
+6. 等待部署完成，访问仓库GitHub Pages URL（如：`https://your-username.github.io/lyrics-translator-proxy/`）
+
+### 4.3 测试代理服务
+1. 访问代理服务的URL，页面显示「GitHub Pages Proxy Server」表示部署成功
+2. 可使用curl测试代理功能：
+   ```bash
+   curl -X POST "https://your-username.github.io/lyrics-translator-proxy/translate" \
+   -H "Content-Type: application/x-www-form-urlencoded" \
+   -d "q=test&from=en&to=zh&appid=20251221002524051&salt=123456&sign=xxx"
+   ```
+
+### 4.4 更新前端配置
+1. 打开`js/services/aiService.js`文件
+2. 将`githubProxyUrl`变量更新为您的代理服务URL：
+   ```javascript
+   const githubProxyUrl = 'https://your-username.github.io/lyrics-translator-proxy/translate';
+   ```
+3. 保存文件并部署到GitHub Pages
+
+## 5. GitHub Pages部署
+
+### 5.1 准备GitHub仓库
 1. 创建GitHub仓库（如：`lyrics-translator`）
 2. 将项目文件推送到仓库
 
-### 4.2 配置GitHub Pages
+### 5.2 配置GitHub Pages
 1. 进入仓库「Settings」页面
 2. 导航到「Pages」配置
 3. 选择「Source」为「Deploy from a branch」

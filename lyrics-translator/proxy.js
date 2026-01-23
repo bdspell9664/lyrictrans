@@ -44,14 +44,14 @@ const server = http.createServer((req, res) => {
     
     // 设置CORS头
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
     res.setHeader('Access-Control-Max-Age', '86400');
     
     // 处理预检请求
     if (req.method === 'OPTIONS') {
         log('info', '处理预检请求');
-        res.writeHead(200);
+        res.writeHead(204);
         res.end();
         return;
     }
@@ -61,10 +61,33 @@ const server = http.createServer((req, res) => {
         log('info', '处理HEAD请求');
         res.writeHead(200, {
             'Content-Type': 'application/json; charset=utf-8',
-            'Server': 'LyricsTranslator/1.0'
+            'Server': 'LyricsTranslator/1.0',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Content-Length, X-Requested-With'
         });
         res.end();
         return;
+    }
+    
+    // 处理GET请求（用于健康检查）
+    if (req.method === 'GET') {
+        log('info', '处理GET请求');
+        // 只允许/translate路径的GET请求，用于健康检查
+        if (req.url === '/translate' || req.url === '/status' || req.url === '/ping') {
+            res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ 
+                status: 'ok', 
+                message: 'Proxy server is running',
+                timestamp: new Date().toISOString() 
+            }));
+            return;
+        } else {
+            return handleError(res, '请求路径不正确', 404);
+        }
     }
     
     // 只处理POST请求

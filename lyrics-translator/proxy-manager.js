@@ -77,49 +77,54 @@ function updateStatus(newStatus) {
 function checkProxyStatus() {
     return new Promise((resolve) => {
         // 尝试使用不同的请求方式和路径进行检查
-        const checkPaths = ['/translate', '/status', '/ping'];
+        const checkConfigs = [
+            { path: '/translate', method: 'HEAD' },
+            { path: '/status', method: 'GET' },
+            { path: '/ping', method: 'GET' }
+        ];
         let checkIndex = 0;
         
-        const checkNextPath = () => {
-            if (checkIndex >= checkPaths.length) {
+        const checkNextConfig = () => {
+            if (checkIndex >= checkConfigs.length) {
                 resolve(false);
                 return;
             }
             
-            const path = checkPaths[checkIndex];
+            const { path, method } = checkConfigs[checkIndex];
             checkIndex++;
             
             const req = http.request({
                 hostname: 'localhost',
                 port: PROXY_PORT,
                 path: path,
-                method: 'HEAD',
-                timeout: 2000
+                method: method,
+                timeout: 3000 // 延长超时时间
             }, (res) => {
                 // 200, 405 (方法不允许), 404 (路径不存在但服务器运行) 都表示服务器正在运行
                 if (res.statusCode >= 200 && res.statusCode < 500) {
-                    log('debug', `代理服务器检查成功，路径: ${path}，状态码: ${res.statusCode}`);
+                    log('debug', `代理服务器检查成功，路径: ${path}，方法: ${method}，状态码: ${res.statusCode}`);
                     resolve(true);
                 } else {
-                    checkNextPath();
+                    log('debug', `代理服务器检查失败，路径: ${path}，方法: ${method}，状态码: ${res.statusCode}`);
+                    checkNextConfig();
                 }
             });
             
             req.on('error', (error) => {
-                log('debug', `代理服务器检查失败，路径: ${path}，错误: ${error.message}`);
-                checkNextPath();
+                log('debug', `代理服务器检查失败，路径: ${path}，方法: ${method}，错误: ${error.message}`);
+                checkNextConfig();
             });
             
             req.on('timeout', () => {
-                log('debug', `代理服务器检查超时，路径: ${path}`);
+                log('debug', `代理服务器检查超时，路径: ${path}，方法: ${method}`);
                 req.destroy();
-                checkNextPath();
+                checkNextConfig();
             });
             
             req.end();
         };
         
-        checkNextPath();
+        checkNextConfig();
     });
 }
 
@@ -206,16 +211,29 @@ function startProxy() {
                 restartAttempts++;
                 lastRestartTime = Date.now();
                 
-                // 自动重启，除非达到最大尝试次数
-                if (restartAttempts < MAX_RESTART_ATTEMPTS) {
+                // 检查是否是正常退出（SIGINT信号，退出码0）
+                const isNormalExit = code === 0 && signal === null;
+                
+                // 自动重启，除非达到最大尝试次数或正常退出
+                if (!isNormalExit && restartAttempts < MAX_RESTART_ATTEMPTS) {
+                    // 计算重启延迟，指数退避
+                    const dynamicDelay = Math.min(RESTART_DELAY * Math.pow(2, restartAttempts - 1), 10000);
                     setTimeout(() => {
-                        log('info', `尝试自动重启代理服务器... (尝试 ${restartAttempts + 1}/${MAX_RESTART_ATTEMPTS})`);
+                        log('info', `尝试自动重启代理服务器... (尝试 ${restartAttempts + 1}/${MAX_RESTART_ATTEMPTS})，延迟: ${dynamicDelay}ms`);
                         startProxy().catch(err => {
                             log('error', `自动重启失败: ${err.message}`);
                         });
-                    }, RESTART_DELAY);
+                    }, dynamicDelay);
+                } else if (isNormalExit) {
+                    log('info', '代理服务器正常退出，不自动重启');
+                    restartAttempts = 0; // 重置重启次数
                 } else {
                     log('error', `已达到最大重启尝试次数 (${MAX_RESTART_ATTEMPTS})，停止自动重启`);
+                    // 1分钟后重置重启次数，允许再次尝试
+                    setTimeout(() => {
+                        log('info', '重启尝试次数已重置，允许重新启动代理服务器');
+                        restartAttempts = 0;
+                    }, 60000);
                 }
             });
             

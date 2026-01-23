@@ -8,6 +8,9 @@ class LyricTranslatorApp {
      * 初始化应用
      */
     constructor() {
+        // 应用版本号
+        this.version = '1.0.0';
+        
         this.uploadedFiles = [];
         this.currentFileIndex = 0;
         this.parsedData = null;
@@ -595,7 +598,7 @@ class LyricTranslatorApp {
      */
     initConsole() {
         this.log('info', '控制台初始化完成');
-        this.log('info', '歌词翻译工具启动');
+        this.log('info', `歌词翻译工具启动，版本: ${this.version}`);
     }
     
     /**
@@ -908,48 +911,75 @@ class LyricTranslatorApp {
     }
     
     /**
-     * 使用HTTP API检查代理状态（WebSocket不可用时的备选方案）
-     */
-    async checkProxyStatusHttp() {
-        const statusElement = document.getElementById('proxyStatus');
-        if (!statusElement) return;
-        
-        statusElement.textContent = '代理状态：检查中...';
-        statusElement.className = 'status-indicator checking';
-        this.log('info', '开始使用HTTP API检查代理服务器状态');
-        
+ * 使用HTTP API检查代理状态（WebSocket不可用时的备选方案）
+ */
+async checkProxyStatusHttp() {
+    const statusElement = document.getElementById('proxyStatus');
+    if (!statusElement) return;
+    
+    statusElement.textContent = '代理状态：检查中...';
+    statusElement.className = 'status-indicator checking';
+    this.log('info', '开始使用HTTP API检查代理服务器状态');
+    
+    // 尝试不同的路径和方法进行检查
+    const checkUrls = [
+        { url: 'http://localhost:3001/translate', method: 'HEAD' },
+        { url: 'http://localhost:3001/status', method: 'GET' },
+        { url: 'http://localhost:3001/ping', method: 'GET' }
+    ];
+    
+    let isRunning = false;
+    let lastError = null;
+    
+    // 尝试所有检查URL
+    for (const checkConfig of checkUrls) {
         try {
             // 使用 AbortController 实现超时
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3000);
             
             // 检查代理服务器
-            const proxyUrl = 'http://localhost:3001/translate';
-            const response = await fetch(proxyUrl, {
-                method: 'HEAD',
-                signal: controller.signal
+            const response = await fetch(checkConfig.url, {
+                method: checkConfig.method,
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
             });
             
             clearTimeout(timeoutId);
             
-            if (response.ok) {
-                this.updateProxyStatusDisplay('running');
+            // 只要服务器返回2xx或3xx状态码，就认为代理正在运行
+            if (response.status >= 200 && response.status < 500) {
+                isRunning = true;
+                break;
             } else {
-                throw new Error(`代理服务器响应错误: ${response.status}`);
+                lastError = new Error(`代理服务器响应错误: ${response.status}`);
             }
         } catch (error) {
-            this.updateProxyStatusDisplay('stopped');
-            
-            if (error.name === 'AbortError') {
-                this.log('warning', '代理服务器检测超时，可能离线或网络连接问题');
-            } else {
-                this.log('error', `代理服务器检测失败: ${error.message}`);
-            }
-            
-            // 尝试启动代理
-            this.startProxyHttp();
+            lastError = error;
         }
     }
+    
+    if (isRunning) {
+        this.updateProxyStatusDisplay('running');
+    } else {
+        this.updateProxyStatusDisplay('stopped');
+        
+        if (lastError) {
+            if (lastError.name === 'AbortError') {
+                this.log('warning', '代理服务器检测超时，可能离线或网络连接问题');
+            } else {
+                this.log('error', `代理服务器检测失败: ${lastError.message}`);
+            }
+        } else {
+            this.log('error', '代理服务器检测失败: 未知错误');
+        }
+        
+        // 尝试启动代理
+        this.startProxyHttp();
+    }
+}
     
     /**
      * 使用HTTP API启动代理服务器
@@ -957,16 +987,23 @@ class LyricTranslatorApp {
     async startProxyHttp() {
         try {
             this.log('info', '尝试使用HTTP API启动代理服务器');
+            // 使用 AbortController 实现超时
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
             const response = await fetch('http://localhost:3003/api/proxy/start', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
-                }
+                },
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             if (response.ok) {
                 this.log('success', '代理服务器启动请求已发送');
-                // 重新检查状态
+                // 延迟检查状态，给代理服务器足够的启动时间
                 setTimeout(() => {
                     this.checkProxyStatusHttp();
                 }, 2000);
@@ -975,7 +1012,19 @@ class LyricTranslatorApp {
                 this.log('error', `启动代理服务器失败: ${errorData.error}`);
             }
         } catch (error) {
-            this.log('error', `使用HTTP API启动代理服务器失败: ${error.message}`);
+            if (error.name === 'AbortError') {
+                this.log('error', '使用HTTP API启动代理服务器超时');
+            } else {
+                this.log('error', `使用HTTP API启动代理服务器失败: ${error.message}`);
+            }
+            
+            // 检查是否是因为代理管理器未启动
+            this.log('info', '可能是代理管理器未启动，尝试直接启动代理进程');
+            
+            // 尝试直接启动代理进程（仅在开发环境）
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                this.log('info', '开发环境下，建议手动启动代理服务器：npm run start:proxy');
+            }
         }
     }
     

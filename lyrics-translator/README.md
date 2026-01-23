@@ -8,13 +8,15 @@
 - 多种翻译语言支持
 - 双语模式（原文+译文）
 - 批量翻译功能
-- 逐字歌词生成（实验性）
+- 逐字歌词生成（支持多种主流播放器格式）
 - 实时控制台日志
 - 代理服务器状态检测
 - 自动代理服务器管理
 - 多语言翻译质量优化
 - 长文本自动分割处理
 - 智能错误处理和重试机制
+- GitHub Pages代理服务器支持
+- 版本号显示功能
 
 ## 翻译功能
 
@@ -66,17 +68,21 @@
 
 ## GitHub Pages部署说明
 
-### 部署限制
+### 部署选项
 
-由于GitHub Pages的静态站点特性，部署到GitHub Pages后，**翻译功能需要本地代理服务器支持**。这是因为：
+#### 选项1：使用GitHub Pages代理服务器（推荐）
 
-1. 百度翻译API有跨域限制，无法直接从浏览器调用
-2. GitHub Pages不支持运行Node.js服务器
-3. 翻译功能依赖本地代理服务器解决跨域问题
+我们提供了一个GitHub Pages代理服务，无需本地代理服务器即可使用翻译功能：
 
-### 本地使用指南
+1. 部署本项目到你的GitHub Pages
+2. 在GitHub上创建一个新的仓库，用于部署代理服务
+3. 将 `github-proxy` 目录下的文件上传到新仓库
+4. 在GitHub Pages上部署这个新仓库
+5. 更新主应用的代理配置，指向你的代理服务URL
 
-要使用完整的翻译功能，请按照以下步骤操作：
+#### 选项2：使用本地代理服务器
+
+要使用完整的翻译功能，也可以按照以下步骤操作：
 
 1. **克隆项目到本地**
    ```bash
@@ -108,8 +114,9 @@
 如果你直接访问GitHub Pages上的应用（如 `https://your-username.github.io/lyrics-translator`）：
 
 1. 你可以正常上传和查看歌词文件
-2. 但翻译功能将不可用，除非你手动启动本地代理服务器
-3. 控制台会显示清晰的提示信息，指导你如何启动代理服务器
+2. 翻译功能将使用GitHub Pages代理服务（如果配置了）
+3. 否则，你需要手动启动本地代理服务器
+4. 控制台会显示清晰的提示信息，指导你如何启动代理服务器
 
 ## 快速开始
 
@@ -172,28 +179,45 @@ npm run start:proxy
 lyrics-translator/
 ├── css/
 │   └── style.css          # 样式文件
+├── github-proxy/          # GitHub Pages代理服务
+│   ├── index.html         # 代理服务主页
+│   ├── proxy.js           # 代理服务代码
+│   ├── README.md          # 代理服务说明
+│   └── sw.js              # Service Worker
 ├── js/
+│   ├── generators/        # 歌词格式生成器
+│   │   ├── AMLLGenerator.js
+│   │   ├── DBGenerator.js
+│   │   └── TTMLGenerator.js
+│   ├── parsers/           # 各种格式解析器
+│   │   ├── assParser.js
+│   │   ├── lrcParser.js
+│   │   ├── parserManager.js
+│   │   ├── srtParser.js
+│   │   └── txtParser.js
+│   ├── players/           # 播放器相关
+│   │   └── WordByWordPlayer.js
 │   ├── services/
 │   │   ├── aiService.js   # AI翻译服务
+│   │   ├── apiKeyManager.js
 │   │   └── browserProxy.js # 浏览器内代理
 │   ├── utils/
+│   │   ├── env.js         # 环境检测工具
 │   │   ├── file.js        # 文件处理工具
-│   │   └── env.js         # 环境检测工具
-│   ├── parsers/           # 各种格式解析器
-│   │   ├── lrcParser.js
-│   │   ├── srtParser.js
-│   │   ├── assParser.js
-│   │   ├── txtParser.js
-│   │   └── parserManager.js
+│   │   └── timelineManager.js
 │   └── app.js             # 主应用逻辑
 ├── md5.js                 # MD5加密算法
 ├── proxy.js               # 代理服务器
 ├── proxy-manager.js       # 代理服务器管理器
 ├── start.js               # 启动脚本
-├── test-translation.js    # 翻译功能测试脚本
+├── test-comprehensive.js  # 综合测试脚本
 ├── test-performance.js    # 性能测试脚本
 ├── test-multilingual.js   # 多语言测试脚本
+├── test-translation.js    # 翻译功能测试脚本
+├── test-server.js         # 服务器测试脚本
 ├── package.json           # 项目配置
+├── CHANGELOG.md           # 版本变更记录
+├── DEPLOYMENT_GUIDE.md    # 部署指南
 ├── README.md              # 项目说明
 └── index.html             # 主页面
 ```

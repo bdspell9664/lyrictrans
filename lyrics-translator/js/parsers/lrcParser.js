@@ -93,54 +93,65 @@ class LRCParser {
     generate(parsedData, includeOriginal = false) {
         const lines = [];
 
+        // 首先添加所有元数据
         parsedData.lyricLines.forEach(line => {
             if (line.type === 'metadata') {
-                // 保持元数据不变
                 lines.push(line.originalLine);
-            } else if (line.type === 'lyric') {
+            }
+        });
+        
+        // 添加空行分隔元数据和歌词
+        if (lines.length > 0) {
+            lines.push('');
+        }
+
+        // 处理歌词行
+        parsedData.lyricLines.forEach(line => {
+            if (line.type === 'lyric') {
+                // 重建歌词行的时间戳
+                const timeTags = line.timestamps.map(ts => {
+                    // 格式化时间戳为标准格式：[mm:ss.xx]
+                    const minutes = Math.floor(ts.totalMilliseconds / 60000);
+                    const seconds = Math.floor((ts.totalMilliseconds % 60000) / 1000);
+                    const centiseconds = Math.floor((ts.totalMilliseconds % 1000) / 10);
+                    return `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}]`;
+                }).join('');
+                
                 // 检查是否有逐字时间戳
                 if (line.wordTimestamps && line.wordTimestamps.length > 0) {
-                    // 生成逐字歌词
-                    let wordLyric = '';
+                    // 生成逐字歌词，使用扩展LRC格式
+                    // 基础行：[时间戳]完整歌词
+                    // 逐字行：[时间戳]字1[时间戳]字2[时间戳]字3...
+                    const fullLineText = line.translatedText || line.text;
+                    lines.push(`${timeTags}${fullLineText}`);
                     
-                    // 添加第一个时间戳
-                    const firstTimeTag = line.timestamps.map(ts => ts.original).join('');
-                    
-                    // 生成逐字歌词内容
+                    // 生成逐字歌词行
+                    let wordLine = '';
                     line.wordTimestamps.forEach(wordTimestamp => {
-                        // 格式化时间戳：[mm:ss.xxx]
+                        // 格式化时间戳为标准格式：[mm:ss.xx]
                         const minutes = Math.floor(wordTimestamp.startTime / 60000);
                         const seconds = Math.floor((wordTimestamp.startTime % 60000) / 1000);
-                        const milliseconds = wordTimestamp.startTime % 1000;
-                        const timeTag = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}]`;
+                        const centiseconds = Math.floor((wordTimestamp.startTime % 1000) / 10);
+                        const wordTimeTag = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}]`;
                         
-                        // 添加时间戳和字
-                        wordLyric += `${timeTag}${wordTimestamp.word}`;
+                        wordLine += `${wordTimeTag}${wordTimestamp.word}`;
                     });
+                    lines.push(wordLine);
                     
                     // 如果是双语模式，添加翻译
-                    if (includeOriginal && line.translatedText) {
-                        // 为翻译添加时间戳
-                        const translatedText = line.translatedText;
-                        const translatedWordLyric = firstTimeTag + translatedText;
-                        lines.push(wordLyric);
-                        lines.push(translatedWordLyric);
-                    } else {
-                        // 只添加逐字歌词
-                        lines.push(wordLyric);
+                    if (includeOriginal && line.translatedText && line.text !== line.translatedText) {
+                        // 翻译行：[时间戳]翻译文本
+                        lines.push(`${timeTags}${line.text}`);
                     }
                 } else {
                     // 普通歌词格式
-                    // 重建歌词行，包含所有时间戳
-                    const timeTags = line.timestamps.map(ts => ts.original).join('');
-                    
                     // 如果是双语模式，每行原文后面跟着对应的翻译行
-                    if (includeOriginal && line.translatedText) {
+                    if (includeOriginal && line.translatedText && line.text !== line.translatedText) {
                         // 格式：
-                        // [时间戳]原文
                         // [时间戳]翻译
-                        lines.push(`${timeTags}${line.text}`);
+                        // [时间戳]原文
                         lines.push(`${timeTags}${line.translatedText}`);
+                        lines.push(`${timeTags}${line.text}`);
                     } else {
                         // 只显示翻译或原文
                         const text = line.translatedText || line.text;
@@ -149,12 +160,12 @@ class LRCParser {
                 }
             } else if (line.type === 'text') {
                 // 纯文本行
-                if (includeOriginal && line.translatedText) {
+                if (includeOriginal && line.translatedText && line.text !== line.translatedText) {
                     // 格式：
-                    // 原文
                     // 翻译
-                    lines.push(`${line.text}`);
-                    lines.push(`${line.translatedText}`);
+                    // 原文
+                    lines.push(line.translatedText);
+                    lines.push(line.text);
                 } else {
                     const text = line.translatedText || line.text;
                     lines.push(text);
