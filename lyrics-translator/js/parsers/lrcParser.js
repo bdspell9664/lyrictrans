@@ -48,8 +48,20 @@ class LRCParser {
                 while ((match = timeTagRegex.exec(timeTags)) !== null) {
                     const minutes = parseInt(match[1]);
                     const seconds = parseInt(match[2]);
-                    const milliseconds = parseInt(match[3]);
-                    const totalMilliseconds = minutes * 60 * 1000 + seconds * 1000 + milliseconds * 10;
+                    // 修复毫秒计算，直接使用parseInt(match[3])，如果是三位数则除以1000，两位数则除以100
+                    const millisecondStr = match[3];
+                    let milliseconds;
+                    if (millisecondStr.length === 3) {
+                        // 三位数毫秒，如.456表示456毫秒
+                        milliseconds = parseInt(millisecondStr);
+                    } else if (millisecondStr.length === 2) {
+                        // 两位数毫秒，如.45表示450毫秒
+                        milliseconds = parseInt(millisecondStr) * 10;
+                    } else {
+                        // 一位数或其他情况，如.4表示400毫秒
+                        milliseconds = parseInt(millisecondStr) * 100;
+                    }
+                    const totalMilliseconds = minutes * 60 * 1000 + seconds * 1000 + milliseconds;
                     
                     timestamps.push({
                         original: match[0],

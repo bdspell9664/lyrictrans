@@ -53,50 +53,83 @@ class WordByWordPlayer {
     _preprocessLyrics(parsedData) {
         const lyricLines = [];
         
-        parsedData.lyricLines.forEach((line, index) => {
-            if (line.type === 'lyric' && line.timestamps && line.timestamps.length > 0) {
-                // 获取该行的开始时间
-                const startTime = line.timestamps[0].totalMilliseconds;
+        // 首先提取所有歌词行，按时间排序
+        const allLyricLines = parsedData.lyricLines.filter(line => 
+            line.type === 'lyric' && line.timestamps && line.timestamps.length > 0
+        ).sort((a, b) => a.timestamps[0].totalMilliseconds - b.timestamps[0].totalMilliseconds);
+        
+        allLyricLines.forEach((line, index) => {
+            // 获取该行的开始时间
+            const startTime = line.timestamps[0].totalMilliseconds;
+            
+            // 计算结束时间（使用下一行的开始时间或默认5秒）
+            let endTime;
+            if (index < allLyricLines.length - 1) {
+                const nextLine = allLyricLines[index + 1];
+                endTime = nextLine.timestamps[0].totalMilliseconds;
+            } else {
+                // 最后一行，默认持续5秒
+                endTime = startTime + 5000;
+            }
+            
+            // 确保结束时间大于开始时间
+            endTime = Math.max(endTime, startTime + 100);
+            
+            // 准备逐字播放的数据
+            let wordTimestamps = [];
+            if (line.wordTimestamps && line.wordTimestamps.length > 0) {
+                // 修复现有时间戳，确保开始时间和结束时间的一致性
+                wordTimestamps = line.wordTimestamps.map((timestamp, wordIndex) => {
+                    // 确保startTime和endTime的精度，避免小数精度问题
+                    const fixedStartTime = parseFloat(timestamp.startTime.toFixed(3));
+                    const fixedEndTime = parseFloat(timestamp.endTime.toFixed(3));
+                    return {
+                        word: timestamp.word,
+                        startTime: fixedStartTime,
+                        endTime: fixedEndTime
+                    };
+                });
+            } else {
+                // 如果没有逐字时间戳，生成默认的均匀分配时间戳
+                const text = line.text;
+                // 使用更智能的分词方式，保留空格和标点符号
+                const words = text.split('');
+                const wordCount = words.length;
+                const duration = endTime - startTime;
                 
-                // 计算结束时间（使用下一行的开始时间或默认10秒）
-                let endTime = startTime + 10000; // 默认持续10秒
-                if (index < parsedData.lyricLines.length - 1) {
-                    const nextLine = parsedData.lyricLines[index + 1];
-                    if (nextLine.type === 'lyric' && nextLine.timestamps && nextLine.timestamps.length > 0) {
-                        endTime = nextLine.timestamps[0].totalMilliseconds;
-                    }
-                }
-                
-                // 准备逐字播放的数据
-                let wordTimestamps = [];
-                if (line.wordTimestamps && line.wordTimestamps.length > 0) {
-                    wordTimestamps = line.wordTimestamps;
-                } else {
-                    // 如果没有逐字时间戳，生成默认的均匀分配时间戳
-                    const words = line.text.split('');
-                    const duration = endTime - startTime;
-                    const wordDuration = duration / words.length;
+                if (wordCount > 0) {
+                    // 计算每个字的持续时间，使用整数运算避免精度问题
+                    const baseDuration = Math.floor(duration / wordCount);
+                    const remainder = duration % wordCount;
                     
-                    wordTimestamps = words.map((word, wordIndex) => {
-                        const wordStartTime = startTime + (wordIndex * wordDuration);
-                        return {
+                    wordTimestamps = [];
+                    let currentTime = startTime;
+                    
+                    words.forEach((word, wordIndex) => {
+                        // 分配剩余时间，确保总时长正确
+                        const currentDuration = baseDuration + (wordIndex < remainder ? 1 : 0);
+                        const wordEndTime = currentTime + currentDuration;
+                        
+                        wordTimestamps.push({
                             word: word,
-                            startTime: wordStartTime,
-                            endTime: wordStartTime + wordDuration
-                        };
+                            startTime: currentTime,
+                            endTime: wordEndTime
+                        });
+                        
+                        currentTime = wordEndTime;
                     });
                 }
-                
-                lyricLines.push({
-                    index: index,
-                    text: line.text,
-                    translatedText: line.translatedText || '',
-                    startTime: startTime,
-                    endTime: endTime,
-                    wordTimestamps: wordTimestamps,
-                    wordCount: wordTimestamps.length
-                });
             }
+            
+            lyricLines.push({
+                index: line.index,
+                text: line.text,
+                translatedText: line.translatedText || '',
+                startTime: parseFloat(startTime.toFixed(3)),
+                endTime: parseFloat(endTime.toFixed(3)),
+                wordTimestamps: wordTimestamps,
+                wordCount: wordTimestamps.length
+            });
         });
         
         // 按时间排序
@@ -270,11 +303,37 @@ class WordByWordPlayer {
      * @private
      */
     _startUpdateLoop() {
-        const update = () => {
-            this._update();
-            requestAnimationFrame(update);
+        // 使用更高效的更新策略：
+        // 1. 当音频播放时，使用timeupdate事件触发更新
+        // 2. 当音频暂停时，停止更新
+        // 3. 只在必要时调用_update方法
+        this._lastUpdateTime = 0;
+        this._updateRequested = false;
+        
+        const efficientUpdate = () => {
+            if (!this._updateRequested) {
+                this._updateRequested = true;
+                requestAnimationFrame(() => {
+                    this._updateRequested = false;
+                    this._update();
+                });
+            }
         };
-        update();
+        
+        // 监听音频的timeupdate事件
+        if (this.audioElement) {
+            this.audioElement.addEventListener('timeupdate', efficientUpdate);
+        }
+        
+        // 为了确保初始状态正确，仍然启动一个基础的更新循环
+        // 但只在音频未播放时才执行更新
+        const baseUpdate = () => {
+            if (!this.isPlaying) {
+                this._update();
+            }
+            requestAnimationFrame(baseUpdate);
+        };
+        baseUpdate();
     }
     
     /**
@@ -308,15 +367,47 @@ class WordByWordPlayer {
      * @private
      */
     _findCurrentLine(time) {
-        for (let i = this.lyricLines.length - 1; i >= 0; i--) {
-            const line = this.lyricLines[i];
+        if (!this.lyricLines || this.lyricLines.length === 0) {
+            return null;
+        }
+        
+        // 使用二分查找算法，提高查找效率
+        let left = 0;
+        let right = this.lyricLines.length - 1;
+        let foundIndex = -1;
+        
+        while (left <= right) {
+            const mid = Math.floor((left + right) / 2);
+            const line = this.lyricLines[mid];
+            
             if (time >= line.startTime) {
-                return {
-                    ...line,
-                    index: i
-                };
+                foundIndex = mid;
+                left = mid + 1;
+            } else {
+                right = mid - 1;
             }
         }
+        
+        // 检查找到的行是否真的在时间范围内
+        if (foundIndex >= 0) {
+            const line = this.lyricLines[foundIndex];
+            // 确保当前时间在该行的时间范围内
+            if (time >= line.startTime && time <= line.endTime) {
+                return {
+                    ...line,
+                    index: foundIndex
+                };
+            } else if (time > line.endTime) {
+                // 如果当前时间超过最后一行的结束时间，返回最后一行
+                if (foundIndex === this.lyricLines.length - 1) {
+                    return {
+                        ...line,
+                        index: foundIndex
+                    };
+                }
+            }
+        }
+        
         return null;
     }
     
@@ -328,6 +419,9 @@ class WordByWordPlayer {
     _updateCurrentLine(currentLine) {
         this.currentLineIndex = currentLine.index;
         this.currentWordIndex = 0;
+        
+        // 缓存当前行的字元素，避免重复查询DOM
+        this._cachedWordSpans = [];
         
         // 更新UI
         this._renderCurrentLine(currentLine);
@@ -361,7 +455,8 @@ class WordByWordPlayer {
         const textContainer = document.createElement('div');
         textContainer.className = 'word-by-word-text';
         
-        // 逐字渲染
+        // 逐字渲染，并缓存字元素
+        this._cachedWordSpans = [];
         line.wordTimestamps.forEach((wordTimestamp, index) => {
             const wordSpan = document.createElement('span');
             wordSpan.className = 'word-by-word-word';
@@ -370,6 +465,9 @@ class WordByWordPlayer {
             wordSpan.dataset.startTime = wordTimestamp.startTime;
             wordSpan.dataset.endTime = wordTimestamp.endTime;
             textContainer.appendChild(wordSpan);
+            
+            // 缓存字元素，避免重复查询DOM
+            this._cachedWordSpans.push(wordSpan);
         });
         
         lineContainer.appendChild(textContainer);
@@ -432,7 +530,6 @@ class WordByWordPlayer {
             return;
         }
         
-        const wordSpans = this.currentLineElement.querySelectorAll('.word-by-word-word');
         let currentWordIndex = -1;
         
         // 查找当前应该高亮的字
@@ -446,16 +543,18 @@ class WordByWordPlayer {
             }
         }
         
-        // 更新高亮状态
-        wordSpans.forEach((span, index) => {
-            span.classList.remove('highlighted', 'current');
-            
-            if (index < currentWordIndex) {
-                span.classList.add('highlighted');
-            } else if (index === currentWordIndex) {
-                span.classList.add('current');
-            }
-        });
+        // 使用缓存的字元素，避免重复查询DOM
+        if (this._cachedWordSpans && this._cachedWordSpans.length > 0) {
+            this._cachedWordSpans.forEach((span, index) => {
+                span.classList.remove('highlighted', 'current');
+                
+                if (index < currentWordIndex) {
+                    span.classList.add('highlighted');
+                } else if (index === currentWordIndex) {
+                    span.classList.add('current');
+                }
+            });
+        }
         
         // 调用回调
         if (currentWordIndex !== this.currentWordIndex) {

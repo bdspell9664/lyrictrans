@@ -304,6 +304,26 @@ class TimelineManager {
             return false;
         }
         
+        // 验证版本号
+        if (!timelineData.version) {
+            // 为旧版本数据添加默认版本号
+            timelineData.version = '1.0';
+        }
+        
+        // 验证元数据
+        if (timelineData.metadata && typeof timelineData.metadata !== 'object') {
+            timelineData.metadata = {};
+        }
+        
+        // 验证时间戳格式
+        if (timelineData.createdAt && !this._isValidTimestamp(timelineData.createdAt)) {
+            timelineData.createdAt = new Date().toISOString();
+        }
+        
+        if (timelineData.updatedAt && !this._isValidTimestamp(timelineData.updatedAt)) {
+            timelineData.updatedAt = new Date().toISOString();
+        }
+        
         // 验证每个时间轴项
         for (const item of timelineData.timeline) {
             if (!item) {
@@ -322,8 +342,13 @@ class TimelineManager {
                         return false;
                     }
                     
-                    // 验证时间精度（确保为有效数值）
+                    // 验证时间精度（确保为有效数值，且在合理范围内）
                     if (isNaN(wordTimestamp.startTime) || isNaN(wordTimestamp.endTime)) {
+                        return false;
+                    }
+                    
+                    // 验证时间戳精度，确保不超过毫秒精度
+                    if (!this._isValidMillisecondTimestamp(wordTimestamp.startTime) || !this._isValidMillisecondTimestamp(wordTimestamp.endTime)) {
                         return false;
                     }
                 }
@@ -331,6 +356,31 @@ class TimelineManager {
         }
         
         return true;
+    }
+    
+    /**
+     * 验证ISO时间戳格式
+     * @param {string} timestamp - ISO时间戳
+     * @returns {boolean} - 是否有效
+     * @private
+     */
+    _isValidTimestamp(timestamp) {
+        if (typeof timestamp !== 'string') {
+            return false;
+        }
+        const date = new Date(timestamp);
+        return !isNaN(date.getTime());
+    }
+    
+    /**
+     * 验证毫秒时间戳精度
+     * @param {number} timestamp - 毫秒时间戳
+     * @returns {boolean} - 是否有效
+     * @private
+     */
+    _isValidMillisecondTimestamp(timestamp) {
+        // 确保时间戳是有效的数字，且不超过100年的毫秒数
+        return typeof timestamp === 'number' && !isNaN(timestamp) && timestamp >= 0 && timestamp <= 3153600000000;
     }
     
     /**
@@ -384,9 +434,15 @@ class TimelineManager {
      * @private
      */
     _generateStorageKey(fileName) {
-        // 使用文件名的哈希值作为键名，避免特殊字符问题
+        // 生成更可靠的键名：
+        // 1. 使用文件名的小写形式作为前缀，便于识别
+        // 2. 结合文件名的哈希值，减少冲突概率
+        // 3. 添加版本号，便于未来扩展和迁移
+        const safeFileName = fileName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
         const hash = this._generateHash(fileName);
-        return `${this.storagePrefix}${hash}`;
+        const version = 'v2';
+        
+        return `${this.storagePrefix}${version}_${safeFileName}_${hash}`;
     }
     
     /**
@@ -396,9 +452,22 @@ class TimelineManager {
      * @private
      */
     _extractFileNameFromKey(storageKey) {
-        // 移除前缀后尝试解析
+        // 移除前缀和版本号，提取安全文件名和哈希值
         const keyWithoutPrefix = storageKey.replace(this.storagePrefix, '');
-        return keyWithoutPrefix;
+        const parts = keyWithoutPrefix.split('_');
+        
+        // 确保至少有版本号、文件名和哈希值三部分
+        if (parts.length < 3) {
+            // 向后兼容旧格式的键名
+            return keyWithoutPrefix;
+        }
+        
+        // 移除版本号和哈希值，恢复原始安全文件名
+        parts.shift(); // 移除版本号
+        parts.pop(); // 移除哈希值
+        
+        // 将下划线替换回原始特殊字符（尽力恢复）
+        return parts.join('_').replace(/_/g, ' ');
     }
     
     /**
@@ -408,16 +477,19 @@ class TimelineManager {
      * @private
      */
     _generateHash(str) {
+        // 使用更可靠的哈希算法，减少冲突概率
         let hash = 0;
         if (str.length === 0) return hash;
         
         for (let i = 0; i < str.length; i++) {
             const char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // Convert to 32bit integer
+            // 改进的哈希算法，使用更复杂的计算
+            hash = ((hash << 7) ^ char) + (hash >> 3);
+            hash = hash & hash; // 转换为32位整数
         }
         
-        return Math.abs(hash).toString();
+        // 确保哈希值为正整数，并转换为十六进制字符串
+        return Math.abs(hash).toString(16);
     }
 }
 

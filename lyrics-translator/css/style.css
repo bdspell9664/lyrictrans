@@ -763,6 +763,221 @@ h2 {
     word-wrap: break-word;
 }
 
+/* 磁带样式播放器 */
+.cassette-container {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border: 3px solid #1a252f;
+    position: relative;
+    overflow: hidden;
+}
+
+.cassette-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: linear-gradient(90deg, #e74c3c 0%, #c0392b 100%);
+    border-bottom: 2px solid #9b59b6;
+}
+
+.cassette-body {
+    background: #ecf0f1;
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* 磁带卷盘区域 */
+.cassette-spools {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 0 30px;
+}
+
+.cassette-spool {
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, #34495e 0%, #2c3e50 100%);
+    border-radius: 50%;
+    position: relative;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    animation: spin 2s linear infinite;
+    animation-play-state: paused;
+}
+
+.cassette-container.playing .cassette-spool {
+    animation-play-state: running;
+}
+
+.cassette-spool::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    background: #1a252f;
+    border-radius: 50%;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.cassette-spool::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    border: 3px solid #3498db;
+    border-radius: 50%;
+    opacity: 0.6;
+}
+
+/* 磁带中间区域 */
+.cassette-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 150px;
+    height: 100px;
+    background: #1a252f;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 10;
+}
+
+/* 磁带播放器控制区域 */
+.cassette-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+/* 磁带样式按钮 */
+.cassette-btn {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    border: none;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.cassette-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(52, 152, 219, 0.4);
+    background: linear-gradient(135deg, #2980b9 0%, #1f618d 100%);
+}
+
+.cassette-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 3px 8px rgba(52, 152, 219, 0.5);
+}
+
+.cassette-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.cassette-btn:hover::before {
+    left: 100%;
+}
+
+.cassette-btn.play {
+    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
+.cassette-btn.pause {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
+}
+
+.cassette-btn.stop {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+/* 磁带进度条 */
+.cassette-progress {
+    width: 100%;
+    margin: 20px 0;
+    background: #34495e;
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.3);
+    position: relative;
+}
+
+.cassette-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #3498db 0%, #9b59b6 100%);
+    border-radius: 6px;
+    transition: width 0.1s ease;
+    position: relative;
+    box-shadow: 0 0 10px rgba(52, 152, 219, 0.4);
+}
+
+.cassette-progress-bar::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    background: #ecf0f1;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* 磁带状态信息 */
+.cassette-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding: 10px 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.cassette-time {
+    color: #ecf0f1;
+    font-weight: 600;
+    font-size: 14px;
+}
+
 /* 音频控制区域 */
 .audio-controls {
     display: flex;
@@ -775,6 +990,54 @@ h2 {
     margin-bottom: 20px;
     flex-wrap: wrap;
     justify-content: center;
+}
+
+/* 磁带样式进度条控制 */
+.cassette-progress-control {
+    width: 100%;
+    margin: 15px 0;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.cassette-progress-control input[type="range"] {
+    flex: 1;
+    height: 8px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #34495e;
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.cassette-progress-control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(52, 152, 219, 0.4);
+    transition: all 0.2s ease;
+}
+
+.cassette-progress-control input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.5);
+}
+
+/* 磁带卷盘旋转动画 */
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .audio-btn {
