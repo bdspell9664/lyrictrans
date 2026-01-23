@@ -37,6 +37,9 @@ class LyricTranslatorApp {
         }
         this.parserManager = new ParserManager();
         
+        // 初始化时间轴管理器
+        this.timelineManager = typeof TimelineManager !== 'undefined' ? new TimelineManager() : null;
+        
         // 代理状态管理
         this.proxyStatus = 'unknown';
         this.proxyWebSocket = null;
@@ -80,6 +83,14 @@ class LyricTranslatorApp {
         this.includeOriginal = document.getElementById('includeOriginal');
         this.translateBtn = document.getElementById('translateBtn');
         
+        // API密钥配置面板元素
+        this.appidInput = document.getElementById('appidInput');
+        this.secretKeyInput = document.getElementById('secretKeyInput');
+        this.saveApiConfigBtn = document.getElementById('saveApiConfigBtn');
+        this.resetApiConfigBtn = document.getElementById('resetApiConfigBtn');
+        this.validateApiConfigBtn = document.getElementById('validateApiConfigBtn');
+        this.apiConfigStatus = document.getElementById('apiConfigStatus');
+        
         // 结果相关元素
         this.resultSection = document.getElementById('resultSection');
         this.tabBtns = document.querySelectorAll('.tab-btn');
@@ -118,11 +129,13 @@ class LyricTranslatorApp {
         this.clearLogBtn = document.getElementById('clearLog');
         this.consoleLog = document.getElementById('consoleLog');
         this.proxyStatus = document.getElementById('proxyStatus');
+        this.proxyInfo = document.getElementById('proxyInfo');
         
         // 代理控制按钮
         this.startProxyBtn = document.getElementById('startProxyBtn');
         this.stopProxyBtn = document.getElementById('stopProxyBtn');
         this.restartProxyBtn = document.getElementById('restartProxyBtn');
+        this.checkProxyBtn = document.getElementById('checkProxyBtn');
         
         // 验证控制台元素是否成功获取
         console.log('控制台元素获取结果:');
@@ -174,6 +187,41 @@ class LyricTranslatorApp {
         console.log('currentLine:', this.currentLine);
         console.log('playBtn:', this.playBtn);
         console.log('progressSlider:', this.progressSlider);
+        
+        // 频谱分析相关元素
+        this.spectrumCanvas = document.getElementById('spectrumCanvas');
+        this.spectrumCtx = this.spectrumCanvas ? this.spectrumCanvas.getContext('2d') : null;
+        this.visualizationMode = document.getElementById('visualizationMode');
+        this.fftSize = document.getElementById('fftSize');
+        this.smoothingTimeConstant = document.getElementById('smoothingTimeConstant');
+        this.smoothingValue = document.getElementById('smoothingValue');
+        this.toggleSpectrum = document.getElementById('toggleSpectrum');
+        this.saveSpectrum = document.getElementById('saveSpectrum');
+        this.clearSpectrum = document.getElementById('clearSpectrum');
+        
+        // 频谱信息显示元素
+        this.peakFrequency = document.getElementById('peakFrequency');
+        this.peakEnergy = document.getElementById('peakEnergy');
+        this.averageEnergy = document.getElementById('averageEnergy');
+        
+        // 频谱分析状态
+        this.isSpectrumVisible = true;
+        this.analyser = null;
+        this.dataArray = null;
+        this.bufferLength = 0;
+        this.spectrumAnimationId = null;
+        this.waterfallData = [];
+        this.waterfallIndex = 0;
+        this.fftSizeValue = 512;
+        this.smoothingValueValue = 0.8;
+        this.visualizationModeValue = 'bars';
+        
+        // 验证频谱元素是否成功获取
+        console.log('频谱元素获取结果:');
+        console.log('spectrumCanvas:', this.spectrumCanvas);
+        console.log('visualizationMode:', this.visualizationMode);
+        console.log('fftSize:', this.fftSize);
+        console.log('smoothingTimeConstant:', this.smoothingTimeConstant);
     }
 
     /**
@@ -435,6 +483,35 @@ class LyricTranslatorApp {
             console.log('重启代理按钮事件绑定成功');
         }
         
+        if (this.checkProxyBtn) {
+            this.checkProxyBtn.addEventListener('click', async () => {
+                this.checkProxyStatus();
+            });
+            console.log('检查代理按钮事件绑定成功');
+        }
+        
+        // API密钥配置事件
+        if (this.saveApiConfigBtn) {
+            this.saveApiConfigBtn.addEventListener('click', () => {
+                this.saveApiConfig();
+            });
+            console.log('保存API配置事件绑定成功');
+        }
+        
+        if (this.resetApiConfigBtn) {
+            this.resetApiConfigBtn.addEventListener('click', () => {
+                this.resetApiConfig();
+            });
+            console.log('重置API配置事件绑定成功');
+        }
+        
+        if (this.validateApiConfigBtn) {
+            this.validateApiConfigBtn.addEventListener('click', () => {
+                this.validateApiConfig();
+            });
+            console.log('验证API配置事件绑定成功');
+        }
+        
         // 通知关闭事件
         if (this.notificationClose) {
             this.notificationClose.addEventListener('click', () => {
@@ -490,6 +567,59 @@ class LyricTranslatorApp {
                 this.resetTimeline();
             });
             console.log('重置时间轴事件绑定成功');
+        }
+        
+        // 频谱分析事件
+        if (this.visualizationMode) {
+            this.visualizationMode.addEventListener('change', (e) => {
+                this.visualizationModeValue = e.target.value;
+                this.log('info', `切换可视化模式: ${this.visualizationModeValue}`);
+                this.updateSpectrumDisplay();
+            });
+            console.log('可视化模式切换事件绑定成功');
+        }
+        
+        if (this.fftSize) {
+            this.fftSize.addEventListener('change', (e) => {
+                this.fftSizeValue = parseInt(e.target.value);
+                this.log('info', `设置FFT大小: ${this.fftSizeValue}`);
+                this.updateAnalyserSettings();
+            });
+            console.log('FFT大小调整事件绑定成功');
+        }
+        
+        if (this.smoothingTimeConstant) {
+            this.smoothingTimeConstant.addEventListener('input', (e) => {
+                this.smoothingValueValue = parseFloat(e.target.value);
+                this.smoothingValue.textContent = this.smoothingValueValue;
+                this.log('info', `设置平滑系数: ${this.smoothingValueValue}`);
+                this.updateAnalyserSettings();
+            });
+            console.log('平滑系数调整事件绑定成功');
+        }
+        
+        if (this.toggleSpectrum) {
+            this.toggleSpectrum.addEventListener('click', () => {
+                this.isSpectrumVisible = !this.isSpectrumVisible;
+                this.toggleSpectrum.textContent = this.isSpectrumVisible ? '隐藏频谱' : '显示频谱';
+                this.spectrumCanvas.style.display = this.isSpectrumVisible ? 'block' : 'none';
+                this.log('info', `频谱${this.isSpectrumVisible ? '显示' : '隐藏'}`);
+            });
+            console.log('频谱显示切换事件绑定成功');
+        }
+        
+        if (this.saveSpectrum) {
+            this.saveSpectrum.addEventListener('click', () => {
+                this.saveSpectrumSnapshot();
+            });
+            console.log('保存频谱快照事件绑定成功');
+        }
+        
+        if (this.clearSpectrum) {
+            this.clearSpectrum.addEventListener('click', () => {
+                this.clearSpectrumData();
+            });
+            console.log('清空频谱数据事件绑定成功');
         }
         
         // 初始化控制台和代理检测
@@ -743,6 +873,81 @@ class LyricTranslatorApp {
         } else {
             // 如果WebSocket不可用，尝试使用HTTP API
             this.restartProxyHttp();
+        }
+    }
+    
+    /**
+     * 检查代理状态
+     */
+    async checkProxyStatus() {
+        try {
+            // 更新UI状态
+            this.updateProxyStatus('checking', '正在检查代理状态...');
+            
+            // 检查AI服务的代理状态
+            const status = await this.aiService.checkAndUpdateProxyStatus();
+            
+            // 更新UI
+            this.updateProxyStatus(status, `代理服务器状态: ${status === 'available' ? '可用' : status === 'unavailable' ? '不可用' : '未知'}`);
+            
+            // 更新按钮状态
+            this.updateProxyButtons(status);
+        } catch (error) {
+            console.error('检查代理状态失败:', error);
+            this.updateProxyStatus('error', '检查代理状态失败');
+        }
+    }
+    
+    /**
+     * 更新代理状态显示
+     * @param {string} status - 代理状态
+     * @param {string} info - 附加信息
+     */
+    updateProxyStatus(status, info = '') {
+        if (this.proxyStatus) {
+            // 移除旧状态类
+            this.proxyStatus.className = 'status-indicator';
+            
+            // 添加新状态类
+            this.proxyStatus.classList.add(`status-${status}`);
+            
+            // 更新状态文本
+            const statusText = {
+                'available': '可用',
+                'unavailable': '不可用',
+                'unknown': '未检测',
+                'checking': '检查中',
+                'starting': '启动中',
+                'stopping': '停止中',
+                'error': '错误'
+            }[status] || '未知';
+            
+            this.proxyStatus.textContent = statusText;
+        }
+        
+        // 更新代理信息
+        if (this.proxyInfo) {
+            this.proxyInfo.textContent = info || '-';
+        }
+    }
+    
+    /**
+     * 更新代理按钮状态
+     * @param {string} status - 代理状态
+     */
+    updateProxyButtons(status) {
+        const isAvailable = status === 'available';
+        
+        if (this.startProxyBtn) {
+            this.startProxyBtn.disabled = isAvailable;
+        }
+        
+        if (this.stopProxyBtn) {
+            this.stopProxyBtn.disabled = !isAvailable;
+        }
+        
+        if (this.restartProxyBtn) {
+            this.restartProxyBtn.disabled = !isAvailable;
         }
     }
     
@@ -1191,13 +1396,459 @@ class LyricTranslatorApp {
             // 生成逐字时间戳
             this.generateWordTimestamps(audioFeatures);
             
+            // 优化时间轴精度
+            if (this.timelineManager) {
+                this.parsedData = this.timelineManager.optimizeTimelineAccuracy(this.parsedData);
+            }
+            
             console.log('真实逐字歌词生成完成');
         } catch (error) {
             console.error('音频处理失败:', error);
             // 如果音频处理失败，使用备用的均匀分配算法
             this.generateFallbackWordTimestamps();
+            
+            // 优化时间轴精度
+            if (this.timelineManager) {
+                this.parsedData = this.timelineManager.optimizeTimelineAccuracy(this.parsedData);
+            }
+            
             console.log('已使用备用算法生成逐字歌词');
         }
+    }
+    
+    /**
+     * 初始化频谱分析器
+     * @param {AudioContext} audioContext - 音频上下文
+     * @param {AudioNode} source - 音频源节点
+     */
+    initSpectrumAnalyser(audioContext, source) {
+        // 创建分析器节点
+        this.analyser = audioContext.createAnalyser();
+        this.analyser.minDecibels = -90;
+        this.analyser.maxDecibels = -10;
+        this.analyser.smoothingTimeConstant = this.smoothingValueValue;
+        this.analyser.fftSize = this.fftSizeValue;
+        
+        // 连接音频源到分析器，再连接到目标节点
+        source.connect(this.analyser);
+        this.analyser.connect(audioContext.destination);
+        
+        // 设置数据数组
+        this.bufferLength = this.analyser.frequencyBinCount;
+        this.dataArray = new Uint8Array(this.bufferLength);
+        
+        // 开始频谱分析动画
+        this.startSpectrumAnimation();
+        
+        console.log('频谱分析器初始化完成');
+        this.log('success', '频谱分析器已初始化');
+    }
+    
+    /**
+     * 更新分析器设置
+     */
+    updateAnalyserSettings() {
+        if (this.analyser) {
+            this.analyser.fftSize = this.fftSizeValue;
+            this.analyser.smoothingTimeConstant = this.smoothingValueValue;
+            
+            // 更新数据数组
+            this.bufferLength = this.analyser.frequencyBinCount;
+            this.dataArray = new Uint8Array(this.bufferLength);
+            
+            console.log('分析器设置已更新:', {
+                fftSize: this.fftSizeValue,
+                smoothingTimeConstant: this.smoothingValueValue,
+                bufferLength: this.bufferLength
+            });
+        }
+    }
+    
+    /**
+     * 开始频谱分析动画
+     */
+    startSpectrumAnimation() {
+        if (!this.spectrumCtx || !this.analyser) return;
+        
+        // 添加鼠标事件监听
+        this.setupSpectrumMouseEvents();
+        
+        const draw = () => {
+            this.spectrumAnimationId = requestAnimationFrame(draw);
+            
+            if (!this.isSpectrumVisible) return;
+            
+            // 获取频谱数据
+            this.analyser.getByteFrequencyData(this.dataArray);
+            
+            // 绘制频谱
+            this.drawSpectrum();
+            
+            // 更新频谱信息
+            this.updateSpectrumInfo();
+            
+            // 绘制选择区域（如果有）
+            this.drawSelection();
+        };
+        
+        draw();
+    }
+    
+    /**
+     * 设置频谱鼠标事件
+     */
+    setupSpectrumMouseEvents() {
+        if (!this.spectrumCanvas) return;
+        
+        // 初始化选择状态
+        this.isSelecting = false;
+        this.selectionStart = { x: 0, y: 0 };
+        this.selectionEnd = { x: 0, y: 0 };
+        this.selectedRange = null;
+        
+        // 鼠标按下事件
+        this.spectrumCanvas.addEventListener('mousedown', (e) => {
+            const rect = this.spectrumCanvas.getBoundingClientRect();
+            this.isSelecting = true;
+            this.selectionStart = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            this.selectionEnd = { ...this.selectionStart };
+        });
+        
+        // 鼠标移动事件
+        this.spectrumCanvas.addEventListener('mousemove', (e) => {
+            if (!this.isSelecting) return;
+            
+            const rect = this.spectrumCanvas.getBoundingClientRect();
+            this.selectionEnd = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        });
+        
+        // 鼠标释放事件
+        this.spectrumCanvas.addEventListener('mouseup', () => {
+            if (!this.isSelecting) return;
+            
+            this.isSelecting = false;
+            
+            // 计算选择区域
+            const startX = Math.min(this.selectionStart.x, this.selectionEnd.x);
+            const endX = Math.max(this.selectionStart.x, this.selectionEnd.x);
+            
+            // 只有当选择区域足够大时才保存
+            if (endX - startX > 10) {
+                this.selectedRange = {
+                    startX,
+                    endX,
+                    startY: Math.min(this.selectionStart.y, this.selectionEnd.y),
+                    endY: Math.max(this.selectionStart.y, this.selectionEnd.y)
+                };
+                
+                // 放大选择区域
+                this.zoomToSelection();
+            } else {
+                this.selectedRange = null;
+            }
+        });
+        
+        // 鼠标离开事件
+        this.spectrumCanvas.addEventListener('mouseleave', () => {
+            this.isSelecting = false;
+        });
+    }
+    
+    /**
+     * 绘制选择区域
+     */
+    drawSelection() {
+        if (!this.spectrumCtx || !this.isSelecting || !this.selectionStart || !this.selectionEnd) return;
+        
+        const startX = Math.min(this.selectionStart.x, this.selectionEnd.x);
+        const endX = Math.max(this.selectionStart.x, this.selectionEnd.x);
+        const startY = Math.min(this.selectionStart.y, this.selectionEnd.y);
+        const endY = Math.max(this.selectionStart.y, this.selectionEnd.y);
+        
+        // 绘制选择区域
+        this.spectrumCtx.fillStyle = 'rgba(79, 172, 254, 0.2)';
+        this.spectrumCtx.fillRect(startX, startY, endX - startX, endY - startY);
+        
+        // 绘制选择边框
+        this.spectrumCtx.strokeStyle = '#4facfe';
+        this.spectrumCtx.lineWidth = 2;
+        this.spectrumCtx.strokeRect(startX, startY, endX - startX, endY - startY);
+    }
+    
+    /**
+     * 放大到选择区域
+     */
+    zoomToSelection() {
+        if (!this.selectedRange) return;
+        
+        // 计算频率范围
+        const sampleRate = this.analyser.context.sampleRate;
+        const totalFrequency = sampleRate / 2;
+        
+        const startFreq = (this.selectedRange.startX / this.spectrumCanvas.width) * totalFrequency;
+        const endFreq = (this.selectedRange.endX / this.spectrumCanvas.width) * totalFrequency;
+        
+        // 更新分析器设置（这里简化处理，实际可以实现更复杂的缩放逻辑）
+        console.log('放大到频率范围:', startFreq.toFixed(2), 'Hz -', endFreq.toFixed(2), 'Hz');
+        this.log('info', `放大到频率范围: ${startFreq.toFixed(2)} Hz - ${endFreq.toFixed(2)} Hz`);
+        
+        // 可以在这里实现更复杂的缩放逻辑，比如调整分析器参数或在绘制时只显示选定范围
+        
+        // 清除选择
+        this.selectedRange = null;
+    }
+    
+    /**
+     * 停止频谱分析动画
+     */
+    stopSpectrumAnimation() {
+        if (this.spectrumAnimationId) {
+            cancelAnimationFrame(this.spectrumAnimationId);
+            this.spectrumAnimationId = null;
+        }
+    }
+    
+    /**
+     * 绘制频谱
+     */
+    drawSpectrum() {
+        if (!this.spectrumCtx || !this.analyser || !this.dataArray) return;
+        
+        const canvas = this.spectrumCanvas;
+        const ctx = this.spectrumCtx;
+        
+        // 清空画布
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 根据不同的可视化模式绘制
+        switch (this.visualizationModeValue) {
+            case 'bars':
+                this.drawSpectrumBars(ctx, canvas);
+                break;
+            case 'curve':
+                this.drawSpectrumCurve(ctx, canvas);
+                break;
+            case 'waterfall':
+                this.drawWaterfall(ctx, canvas);
+                break;
+            case 'waveform':
+                this.drawWaveform(ctx, canvas);
+                break;
+        }
+    }
+    
+    /**
+     * 绘制频谱柱状图
+     * @param {CanvasRenderingContext2D} ctx - Canvas上下文
+     * @param {HTMLCanvasElement} canvas - Canvas元素
+     */
+    drawSpectrumBars(ctx, canvas) {
+        const barWidth = (canvas.width / this.bufferLength) * 2.5;
+        let x = 0;
+        
+        for (let i = 0; i < this.bufferLength; i++) {
+            const barHeight = (this.dataArray[i] / 255) * canvas.height;
+            
+            // 颜色渐变
+            const hue = (i / this.bufferLength) * 360;
+            ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+            
+            // 绘制柱子
+            ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+            
+            x += barWidth + 1;
+        }
+    }
+    
+    /**
+     * 绘制频谱曲线
+     * @param {CanvasRenderingContext2D} ctx - Canvas上下文
+     * @param {HTMLCanvasElement} canvas - Canvas元素
+     */
+    drawSpectrumCurve(ctx, canvas) {
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#00f2fe';
+        ctx.beginPath();
+        
+        const sliceWidth = canvas.width / this.bufferLength;
+        let x = 0;
+        
+        for (let i = 0; i < this.bufferLength; i++) {
+            const v = this.dataArray[i] / 255.0;
+            const y = v * canvas.height / 2;
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+            
+            x += sliceWidth;
+        }
+        
+        ctx.lineTo(canvas.width, canvas.height / 2);
+        ctx.stroke();
+        
+        // 添加渐变填充
+        ctx.fillStyle = 'rgba(79, 172, 254, 0.1)';
+        ctx.fill();
+    }
+    
+    /**
+     * 绘制瀑布图
+     * @param {CanvasRenderingContext2D} ctx - Canvas上下文
+     * @param {HTMLCanvasElement} canvas - Canvas元素
+     */
+    drawWaterfall(ctx, canvas) {
+        // 保存当前数据到瀑布图数据数组
+        this.waterfallData.push(new Uint8Array(this.dataArray));
+        
+        // 限制瀑布图数据长度
+        if (this.waterfallData.length > canvas.height) {
+            this.waterfallData.shift();
+        }
+        
+        // 绘制瀑布图
+        for (let row = 0; row < this.waterfallData.length; row++) {
+            const dataRow = this.waterfallData[row];
+            for (let col = 0; col < dataRow.length; col++) {
+                const value = dataRow[col];
+                const hue = (value / 255) * 360;
+                const alpha = 0.8;
+                
+                ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${alpha})`;
+                
+                // 计算坐标，从底部向上绘制
+                const x = (col / this.bufferLength) * canvas.width;
+                const y = canvas.height - row - 1;
+                
+                ctx.fillRect(x, y, 2, 1);
+            }
+        }
+    }
+    
+    /**
+     * 绘制时域波形图
+     * @param {CanvasRenderingContext2D} ctx - Canvas上下文
+     * @param {HTMLCanvasElement} canvas - Canvas元素
+     */
+    drawWaveform(ctx, canvas) {
+        // 获取时域数据
+        const bufferLength = this.analyser.fftSize;
+        const dataArray = new Uint8Array(bufferLength);
+        this.analyser.getByteTimeDomainData(dataArray);
+        
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#00f2fe';
+        ctx.beginPath();
+        
+        const sliceWidth = canvas.width / bufferLength;
+        let x = 0;
+        
+        for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = v * canvas.height / 2;
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+            
+            x += sliceWidth;
+        }
+        
+        ctx.lineTo(canvas.width, canvas.height / 2);
+        ctx.stroke();
+    }
+    
+    /**
+     * 更新频谱信息显示
+     */
+    updateSpectrumInfo() {
+        if (!this.dataArray || !this.peakFrequency || !this.peakEnergy || !this.averageEnergy) return;
+        
+        // 计算峰值频率
+        let peakIndex = 0;
+        let peakValue = 0;
+        let sum = 0;
+        
+        for (let i = 0; i < this.dataArray.length; i++) {
+            const value = this.dataArray[i];
+            sum += value;
+            
+            if (value > peakValue) {
+                peakValue = value;
+                peakIndex = i;
+            }
+        }
+        
+        // 计算频率值
+        const sampleRate = this.analyser.context.sampleRate;
+        const peakFreq = Math.round((peakIndex / this.bufferLength) * (sampleRate / 2));
+        const avgEnergy = Math.round(sum / this.dataArray.length);
+        
+        // 更新DOM显示
+        this.peakFrequency.textContent = `${peakFreq} Hz`;
+        this.peakEnergy.textContent = peakValue;
+        this.averageEnergy.textContent = avgEnergy;
+    }
+    
+    /**
+     * 更新频谱显示
+     */
+    updateSpectrumDisplay() {
+        if (!this.spectrumCtx) return;
+        
+        // 清空画布
+        this.spectrumCtx.fillStyle = '#000000';
+        this.spectrumCtx.fillRect(0, 0, this.spectrumCanvas.width, this.spectrumCanvas.height);
+        
+        // 如果是瀑布图，清空历史数据
+        if (this.visualizationModeValue === 'waterfall') {
+            this.waterfallData = [];
+        }
+    }
+    
+    /**
+     * 保存频谱快照
+     */
+    saveSpectrumSnapshot() {
+        if (!this.spectrumCanvas) return;
+        
+        try {
+            // 创建下载链接
+            const dataURL = this.spectrumCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = `spectrum-snapshot-${new Date().getTime()}.png`;
+            link.click();
+            
+            this.log('success', '频谱快照已保存');
+        } catch (error) {
+            console.error('保存频谱快照失败:', error);
+            this.log('error', `保存频谱快照失败: ${error.message}`);
+        }
+    }
+    
+    /**
+     * 清空频谱数据
+     */
+    clearSpectrumData() {
+        if (this.spectrumCtx) {
+            this.spectrumCtx.fillStyle = '#000000';
+            this.spectrumCtx.fillRect(0, 0, this.spectrumCanvas.width, this.spectrumCanvas.height);
+        }
+        
+        this.waterfallData = [];
+        this.log('info', '频谱数据已清空');
     }
     
     /**
@@ -1686,6 +2337,16 @@ class LyricTranslatorApp {
         this.log('info', '开始翻译歌词');
         
         try {
+            // 检查API配置是否完整
+            if (!this.aiService.isConfigComplete()) {
+                this.hideLoading();
+                this.log('error', '翻译失败: API配置不完整');
+                this.showNotification('请先配置API密钥', 'warning');
+                // 滚动到API配置面板
+                this.settingsSection.scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+            
             // 处理当前文件
             const file = this.uploadedFiles[this.currentFileIndex];
             this.log('info', `处理文件: ${file.name}`);
@@ -1746,20 +2407,29 @@ class LyricTranslatorApp {
             // 显示结果
             this.showResults(text);
             this.log('success', '翻译结果显示完成');
+            this.showNotification('翻译完成', 'success');
         } catch (error) {
             console.error('翻译失败:', error);
             this.log('error', `翻译失败: ${error.message}`);
             
             // 添加更友好的用户提示
-            let userMessage = `翻译失败: ${error.message}`;
+            let userMessage = error.message;
             
-            if (error.message.includes('跨域错误') || error.message.includes('Failed to fetch')) {
+            // 根据错误类型提供不同的解决方案
+            if (error.message.includes('跨域错误') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
                 userMessage += '\n\n请确保已在项目根目录执行 npm start 启动本地代理服务器';
                 userMessage += '\n启动命令：npm start';
                 userMessage += '\n启动后代理服务器将运行在 http://localhost:3001/translate';
+            } else if (error.message.includes('APP ID和密钥不能为空')) {
+                userMessage += '\n\n请前往翻译设置页面配置百度翻译API密钥';
+            } else if (error.message.includes('未授权的访问') || error.message.includes('签名错误')) {
+                userMessage += '\n\n请检查您的百度翻译API密钥是否正确';
+            } else if (error.message.includes('请求频率过高')) {
+                userMessage += '\n\n翻译请求频率过高，请稍后重试';
             }
             
-            alert(userMessage);
+            // 使用更友好的通知代替alert
+            this.showNotification(userMessage, 'error');
         } finally {
             this.hideLoading();
         }
@@ -1858,12 +2528,48 @@ class LyricTranslatorApp {
             this.updateDownloadProgress(0);
             
             // 生成翻译后的文本
-            const translatedText = this.parser.generate(this.parsedData, this.includeOriginal.checked);
+            const outputFormat = this.outputFormat.value;
+            let translatedText;
+            
+            // 检查是否需要使用特定格式生成器
+            switch (outputFormat) {
+                case 'amll':
+                    // 使用AMLL格式生成器
+                    if (typeof AMLLGenerator !== 'undefined') {
+                        const amllGenerator = new AMLLGenerator();
+                        translatedText = amllGenerator.generate(this.parsedData, this.includeOriginal.checked);
+                    } else {
+                        translatedText = this.parser.generate(this.parsedData, this.includeOriginal.checked);
+                    }
+                    break;
+                case 'ttml':
+                    // 使用TTML格式生成器
+                    if (typeof TTMLGenerator !== 'undefined') {
+                        const ttmlGenerator = new TTMLGenerator();
+                        translatedText = ttmlGenerator.generate(this.parsedData, this.includeOriginal.checked);
+                    } else {
+                        translatedText = this.parser.generate(this.parsedData, this.includeOriginal.checked);
+                    }
+                    break;
+                case 'db':
+                    // 使用DB格式生成器
+                    if (typeof DBGenerator !== 'undefined') {
+                        const dbGenerator = new DBGenerator();
+                        translatedText = dbGenerator.generate(this.parsedData, this.includeOriginal.checked);
+                    } else {
+                        translatedText = this.parser.generate(this.parsedData, this.includeOriginal.checked);
+                    }
+                    break;
+                default:
+                    // 使用原解析器生成
+                    translatedText = this.parser.generate(this.parsedData, this.includeOriginal.checked);
+                    break;
+            }
+            
             this.updateDownloadProgress(30);
             
             // 生成文件名
             const originalFile = this.uploadedFiles[this.currentFileIndex];
-            const outputFormat = this.outputFormat.value;
             const fileExt = outputFormat === 'auto' ? originalFile.name.split('.').pop() : outputFormat;
             const fileName = `${originalFile.name.replace(/\.[^/.]+$/, '')}_translated.${fileExt}`;
             this.updateDownloadProgress(60);
@@ -1909,6 +2615,9 @@ class LyricTranslatorApp {
                 this.audioPlayer.addEventListener('ended', () => {
                     this.onAudioEnded();
                 });
+                
+                // 初始化频谱分析器
+                this.initAudioContext();
             }
             
             this.audioPlayer.play();
@@ -1920,6 +2629,35 @@ class LyricTranslatorApp {
         } catch (error) {
             console.error('播放失败:', error);
             this.showNotification(`播放失败: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * 初始化音频上下文和频谱分析器
+     */
+    initAudioContext() {
+        if (!this.currentAudio) return;
+        
+        try {
+            // 检查浏览器是否支持Web Audio API
+            if (!window.AudioContext && !window.webkitAudioContext) {
+                console.warn('浏览器不支持Web Audio API，无法启用频谱分析');
+                return;
+            }
+            
+            // 创建音频上下文
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // 创建媒体元素源
+            this.source = this.audioContext.createMediaElementSource(this.audioPlayer);
+            
+            // 初始化频谱分析器
+            this.initSpectrumAnalyser(this.audioContext, this.source);
+            
+            console.log('音频上下文和频谱分析器已初始化');
+        } catch (error) {
+            console.error('初始化音频上下文失败:', error);
+            this.log('error', `初始化频谱分析器失败: ${error.message}`);
         }
     }
     
@@ -2177,8 +2915,72 @@ class LyricTranslatorApp {
      * 保存时间轴
      */
     saveTimeline() {
-        // 这里可以实现保存时间轴到文件或其他存储方式
-        this.showNotification('时间轴已保存', 'success');
+        try {
+            if (!this.parsedData) {
+                this.showNotification('没有可保存的时间轴数据', 'warning');
+                return;
+            }
+            
+            if (!this.uploadedFiles || this.uploadedFiles.length === 0) {
+                this.showNotification('没有可保存的文件名', 'warning');
+                return;
+            }
+            
+            const fileName = this.uploadedFiles[this.currentFileIndex].name;
+            
+            if (this.timelineManager) {
+                // 使用时间轴管理器保存时间轴数据
+                const success = this.timelineManager.saveTimeline(fileName, this.parsedData);
+                
+                if (success) {
+                    this.showNotification('时间轴已保存到本地存储', 'success');
+                } else {
+                    this.showNotification('时间轴保存失败', 'error');
+                }
+            } else {
+                // 直接保存到本地存储作为备用方案
+                const timelineData = this._extractTimelineData();
+                const storageKey = `lyrics_timeline_${fileName}`;
+                localStorage.setItem(storageKey, JSON.stringify(timelineData));
+                this.showNotification('时间轴已保存到本地存储', 'success');
+            }
+        } catch (error) {
+            console.error('保存时间轴失败:', error);
+            this.showNotification('时间轴保存失败', 'error');
+        }
+    }
+    
+    /**
+     * 提取时间轴数据（备用方案）
+     * @returns {Object} - 提取的时间轴数据
+     * @private
+     */
+    _extractTimelineData() {
+        const timeline = [];
+        
+        this.parsedData.lyricLines.forEach((line) => {
+            if (line.type === 'lyric') {
+                timeline.push({
+                    text: line.text,
+                    timestamps: line.timestamps,
+                    wordTimestamps: line.wordTimestamps || []
+                });
+            } else {
+                timeline.push({
+                    type: line.type,
+                    text: line.text,
+                    wordTimestamps: []
+                });
+            }
+        });
+        
+        return {
+            version: '1.0',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            metadata: this.parsedData.metadata || {},
+            timeline: timeline
+        };
     }
     
     /**
@@ -2189,6 +2991,108 @@ class LyricTranslatorApp {
         this.generateFallbackWordTimestamps();
         this.initTimelineEditor();
         this.showNotification('时间轴已重置', 'success');
+    }
+    
+    /**
+     * 保存API配置
+     */
+    saveApiConfig() {
+        try {
+            const appid = this.appidInput.value.trim();
+            const secretKey = this.secretKeyInput.value.trim();
+            
+            if (!appid || !secretKey) {
+                this.updateApiConfigStatus('APP ID和密钥不能为空', 'error');
+                return;
+            }
+            
+            // 更新AI服务配置
+            this.aiService.updateConfig({ appid, secretKey });
+            this.updateApiConfigStatus('API配置已保存', 'success');
+            
+            // 记录日志
+            this.log('info', 'API配置已保存');
+        } catch (error) {
+            console.error('保存API配置失败:', error);
+            this.updateApiConfigStatus('保存API配置失败: ' + error.message, 'error');
+        }
+    }
+    
+    /**
+     * 重置API配置
+     */
+    resetApiConfig() {
+        try {
+            // 清空输入字段
+            this.appidInput.value = '';
+            this.secretKeyInput.value = '';
+            
+            // 更新AI服务配置
+            this.aiService.updateConfig({ appid: '', secretKey: '' });
+            this.updateApiConfigStatus('API配置已重置', 'info');
+            
+            // 记录日志
+            this.log('info', 'API配置已重置');
+        } catch (error) {
+            console.error('重置API配置失败:', error);
+            this.updateApiConfigStatus('重置API配置失败: ' + error.message, 'error');
+        }
+    }
+    
+    /**
+     * 验证API配置
+     */
+    async validateApiConfig() {
+        try {
+            this.updateApiConfigStatus('正在验证API配置...', 'info');
+            
+            // 检查输入是否为空
+            const appid = this.appidInput.value.trim();
+            const secretKey = this.secretKeyInput.value.trim();
+            
+            if (!appid || !secretKey) {
+                this.updateApiConfigStatus('APP ID和密钥不能为空', 'error');
+                return;
+            }
+            
+            // 更新AI服务配置
+            this.aiService.updateConfig({ appid, secretKey });
+            
+            // 验证API配置
+            const isValid = await this.aiService.validateApiKey();
+            
+            if (isValid) {
+                this.updateApiConfigStatus('API配置验证成功', 'success');
+                this.log('success', 'API配置验证成功');
+            } else {
+                this.updateApiConfigStatus('API配置验证失败，请检查APP ID和密钥是否正确', 'error');
+                this.log('error', 'API配置验证失败');
+            }
+        } catch (error) {
+            console.error('验证API配置失败:', error);
+            this.updateApiConfigStatus('验证API配置失败: ' + error.message, 'error');
+            this.log('error', '验证API配置失败: ' + error.message);
+        }
+    }
+    
+    /**
+     * 更新API配置状态
+     * @param {string} message - 状态消息
+     * @param {string} type - 状态类型: success, error, info
+     */
+    updateApiConfigStatus(message, type) {
+        if (this.apiConfigStatus) {
+            this.apiConfigStatus.textContent = message;
+            this.apiConfigStatus.className = `api-config-status ${type}`;
+            
+            // 3秒后清除状态消息
+            setTimeout(() => {
+                if (this.apiConfigStatus) {
+                    this.apiConfigStatus.textContent = '';
+                    this.apiConfigStatus.className = 'api-config-status';
+                }
+            }, 3000);
+        }
     }
 }
 

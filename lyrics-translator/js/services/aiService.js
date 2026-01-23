@@ -10,12 +10,15 @@ class AIService {
      * @param {string} config.secretKey - 百度翻译密钥
      */
     constructor(config = {
-        appid: '20251221002524051',
-        secretKey: 'tuvZN9D5mU7MtYcCPreF'
+        appid: '',
+        secretKey: ''
     }) {
+        // 从localStorage加载配置
+        const savedConfig = this.loadConfig();
+        
         this.config = {
-            appid: config.appid || '20251221002524051',
-            secretKey: config.secretKey || 'tuvZN9D5mU7MtYcCPreF',
+            appid: config.appid || savedConfig.appid || '',
+            secretKey: config.secretKey || savedConfig.secretKey || '',
             service: 'baidu' // 仅支持百度翻译
         };
         
@@ -24,11 +27,18 @@ class AIService {
         this.lastProxyCheck = 0;
         this.proxyCheckInterval = 60000; // 1分钟检查一次代理状态
         
+        // 代理服务器配置
+        this.proxyConfig = {
+            port: 3001,
+            apiPort: 3001,
+            baseUrl: 'http://localhost:3001'
+        };
+        
         // 环境检测
-        this.envDetector = typeof EnvDetector !== 'undefined' ? EnvDetector : null;
+        this.envDetector = null;
         
         // 初始化浏览器内代理
-        this.browserProxy = typeof BrowserProxy !== 'undefined' ? new BrowserProxy() : null;
+        this.browserProxy = null;
     }
 
     /**
@@ -115,7 +125,7 @@ class AIService {
         // 使用用户提供的默认百度翻译API配置
         const appid = this.config.appid;
         const secretKey = this.config.secretKey;
-        const proxyUrl = 'http://localhost:3001/translate'; // 使用本地代理服务器
+        const proxyUrl = `${this.proxyConfig.baseUrl}/translate`; // 使用本地代理服务器
         const directApiUrl = 'https://fanyi-api.baidu.com/api/trans/vip/translate'; // 百度翻译API直接地址
         
         // 百度语言代码映射
@@ -243,8 +253,8 @@ class AIService {
                                     chunkResponseData = await proxyResponse.json();
                                 } catch (proxyError) {
                                     console.error('代理请求失败，尝试备选方案:', proxyError);
-                                    // 代理请求失败，尝试使用浏览器内代理
-                                    chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
+                                    // 代理请求失败，尝试使用直接请求
+                                    chunkResponseData = await this.translateWithDirectRequest(chunkText, from, to, chunkRequestOptions);
                                 }
                                 break;
                             case 'unavailable':
@@ -271,25 +281,25 @@ class AIService {
                                             
                                             chunkResponseData = await proxyResponse.json();
                                         } else {
-                                            // 代理启动失败，尝试使用浏览器内代理
-                                            console.log('代理服务器启动失败，尝试使用浏览器内代理');
-                                            chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
+                                            // 代理启动失败，尝试使用直接请求
+                                            console.log('代理服务器启动失败，尝试使用直接请求');
+                                            chunkResponseData = await this.translateWithDirectRequest(chunkText, from, to, chunkRequestOptions);
                                         }
                                     } else {
-                                        // 无法启动代理，尝试使用浏览器内代理
-                                        console.log('无法启动代理服务器，尝试使用浏览器内代理');
-                                        chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
+                                        // 无法启动代理，尝试使用直接请求
+                                        console.log('无法启动代理服务器，尝试使用直接请求');
+                                        chunkResponseData = await this.translateWithDirectRequest(chunkText, from, to, chunkRequestOptions);
                                     }
                                 } catch (startError) {
                                     console.error('启动代理失败，尝试备选方案:', startError);
-                                    // 启动代理失败，尝试使用浏览器内代理
-                                    chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
+                                    // 代理请求失败，尝试使用直接请求
+                                            chunkResponseData = await this.translateWithDirectRequest(chunkText, from, to, chunkRequestOptions);
                                 }
                                 break;
                             default:
-                                // 未知状态，尝试使用浏览器内代理
-                                console.log('代理状态未知，尝试使用浏览器内代理');
-                                chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
+                                // 未知状态，尝试使用直接请求
+                                console.log('代理状态未知，尝试使用直接请求');
+                                chunkResponseData = await this.translateWithDirectRequest(chunkText, from, to, chunkRequestOptions);
                                 break;
                         }
                     } else {
@@ -347,9 +357,9 @@ class AIService {
                                 break;
                             } catch (proxyError) {
                                 console.error('代理请求失败，尝试备选方案:', proxyError);
-                                // 代理请求失败，尝试使用浏览器内代理
-                                responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
-                                break;
+                                // 代理请求失败，尝试使用直接请求
+                                    responseData = await this.translateWithDirectRequest(text, from, to, requestInfo.options);
+                                    break;
                             }
                         case 'unavailable':
                             try {
@@ -376,27 +386,27 @@ class AIService {
                                         responseData = await proxyResponse.json();
                                         break;
                                     } else {
-                                        // 代理启动失败，尝试使用浏览器内代理
-                                        console.log('代理服务器启动失败，尝试使用浏览器内代理');
-                                        responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
-                                        break;
+                                        // 代理启动失败，尝试使用直接请求
+                                            console.log('代理服务器启动失败，尝试使用直接请求');
+                                            responseData = await this.translateWithDirectRequest(text, from, to, requestInfo.options);
+                                            break;
                                     }
                                 } else {
-                                    // 无法启动代理，尝试使用浏览器内代理
-                                    console.log('无法启动代理服务器，尝试使用浏览器内代理');
-                                    responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
+                                    // 无法启动代理，尝试使用直接请求
+                                    console.log('无法启动代理服务器，尝试使用直接请求');
+                                    responseData = await this.translateWithDirectRequest(text, from, to, requestInfo.options);
                                     break;
                                 }
                             } catch (startError) {
                                 console.error('启动代理失败，尝试备选方案:', startError);
-                                // 启动代理失败，尝试使用浏览器内代理
-                                responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
+                                // 启动代理失败，尝试使用直接请求
+                                responseData = await this.translateWithDirectRequest(text, from, to, requestInfo.options);
                                 break;
                             }
                         default:
-                            // 未知状态，尝试使用浏览器内代理
-                            console.log('代理状态未知，尝试使用浏览器内代理');
-                            responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
+                            // 未知状态，尝试使用直接请求
+                            console.log('代理状态未知，尝试使用直接请求');
+                            responseData = await this.translateWithDirectRequest(text, from, to, requestInfo.options);
                             break;
                     }
                 } else {
@@ -452,31 +462,7 @@ class AIService {
      */
     async checkProxyAvailability(proxyUrl) {
         try {
-            // 首先尝试使用代理API获取状态
-            const proxyApiUrl = 'http://localhost:3003/api/proxy/status';
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => {
-                controller.abort();
-            }, 1000); // 1秒超时
-            
-            const apiResponse = await fetch(proxyApiUrl, {
-                method: 'GET',
-                signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (apiResponse.ok) {
-                const data = await apiResponse.json();
-                return data.status === 'running';
-            }
-        } catch (apiError) {
-            // API不可用，尝试直接检查代理服务器
-            console.log('代理API不可用，尝试直接检查代理服务器:', apiError.message);
-        }
-        
-        // 直接检查代理服务器
-        try {
+            // 直接检查代理服务器
             const controller = new AbortController();
             const timeoutId = setTimeout(() => {
                 controller.abort();
@@ -496,34 +482,6 @@ class AIService {
     }
     
     /**
-     * 使用代理API启动代理服务器
-     * @returns {Promise<boolean>} - 是否成功请求启动代理服务器
-     */
-    async startProxyServer() {
-        try {
-            const proxyApiUrl = 'http://localhost:3003/api/proxy/start';
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => {
-                controller.abort();
-            }, 3000); // 3秒超时
-            
-            const response = await fetch(proxyApiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            return response.ok;
-        } catch (error) {
-            console.log('无法通过API启动代理服务器:', error.message);
-            return false;
-        }
-    }
-    
-    /**
      * 检查并更新代理状态
      * @returns {Promise<string>} - 代理状态
      */
@@ -536,7 +494,7 @@ class AIService {
         
         try {
             // 检查本地代理是否可用
-            const isLocalProxyAvailable = await this.checkProxyAvailability('http://localhost:3001/translate');
+            const isLocalProxyAvailable = await this.checkProxyAvailability(`${this.proxyConfig.baseUrl}/translate`);
             
             if (isLocalProxyAvailable) {
                 this.proxyStatus = 'available';
@@ -554,45 +512,31 @@ class AIService {
         }
     }
     
+
+    
     /**
-     * 使用浏览器内代理进行翻译请求（备选方案）
+     * 使用直接请求进行翻译（备选方案）
      * @param {string} text - 要翻译的文本
      * @param {string} from - 源语言代码
      * @param {string} to - 目标语言代码
      * @param {Object} requestOptions - 请求选项
      * @returns {Promise<string>} - 翻译结果
      */
-    async translateWithBrowserProxy(text, from, to, requestOptions) {
-        console.log('使用浏览器内代理进行翻译请求');
+    async translateWithDirectRequest(text, from, to, requestOptions) {
+        console.log('使用直接请求进行翻译');
         
         try {
-            if (this.browserProxy) {
-                // 提取请求体中的参数
-                const bodyParams = this._parseFormData(requestOptions.body);
-                
-                // 使用浏览器内代理进行翻译
-                const responseData = await this.browserProxy.translate(text, from, to, {
-                    appid: bodyParams.appid,
-                    salt: bodyParams.salt,
-                    sign: bodyParams.sign
-                });
-                
-                return responseData;
-            } else {
-                // 如果浏览器内代理不可用，回退到直接请求
-                console.log('浏览器内代理不可用，回退到直接请求');
-                const directApiUrl = 'https://fanyi-api.baidu.com/api/trans/vip/translate';
-                const response = await fetch(directApiUrl, requestOptions);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    return data;
-                } else {
-                    throw new Error(`直接请求失败，状态码: ${response.status}`);
-                }
+            // 直接请求百度翻译API
+            const directApiUrl = 'https://fanyi-api.baidu.com/api/trans/vip/translate';
+            const response = await fetch(directApiUrl, requestOptions);
+            
+            if (!response.ok) {
+                throw new Error(`直接请求失败，状态码: ${response.status}`);
             }
+            
+            return await response.json();
         } catch (error) {
-            console.error('浏览器内代理请求失败:', error);
+            console.error('直接请求失败:', error);
             throw error;
         }
     }
@@ -1064,6 +1008,55 @@ class AIService {
      */
     getNonAIServices() {
         return this.getServices();
+    }
+    
+    /**
+     * 保存配置到localStorage
+     */
+    saveConfig() {
+        try {
+            const configToSave = {
+                appid: this.config.appid,
+                secretKey: this.config.secretKey
+            };
+            localStorage.setItem('lyricsTranslatorConfig', JSON.stringify(configToSave));
+        } catch (error) {
+            console.error('保存配置失败:', error);
+        }
+    }
+    
+    /**
+     * 从localStorage加载配置
+     * @returns {Object} - 加载的配置
+     */
+    loadConfig() {
+        try {
+            const savedConfig = localStorage.getItem('lyricsTranslatorConfig');
+            return savedConfig ? JSON.parse(savedConfig) : {};
+        } catch (error) {
+            console.error('加载配置失败:', error);
+            return {};
+        }
+    }
+    
+    /**
+     * 更新配置
+     * @param {Object} newConfig - 新配置
+     */
+    updateConfig(newConfig) {
+        this.config = {
+            ...this.config,
+            ...newConfig
+        };
+        this.saveConfig();
+    }
+    
+    /**
+     * 检查配置是否完整
+     * @returns {boolean} - 配置是否完整
+     */
+    isConfigComplete() {
+        return !!this.config.appid && !!this.config.secretKey;
     }
     
     /**

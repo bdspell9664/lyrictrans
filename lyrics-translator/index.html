@@ -75,6 +75,27 @@
             <!-- 翻译设置 -->
             <section class="settings-section" id="settingsSection" style="display: none;">
                 <h2>翻译设置</h2>
+                <!-- API密钥配置面板 -->
+                <div class="api-config-panel" style="margin-bottom: 1.5rem; padding: 1rem; background: #f5f5f5; border-radius: 8px;">
+                    <h3>API密钥配置</h3>
+                    <div class="api-config-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0;">
+                        <div class="api-config-item">
+                            <label for="appidInput">百度翻译APP ID：</label>
+                            <input type="text" id="appidInput" placeholder="请输入百度翻译APP ID" style="width: 100%; padding: 0.5rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div class="api-config-item">
+                            <label for="secretKeyInput">百度翻译密钥：</label>
+                            <input type="password" id="secretKeyInput" placeholder="请输入百度翻译密钥" style="width: 100%; padding: 0.5rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                    </div>
+                    <div class="api-config-actions" style="display: flex; gap: 1rem;">
+                        <button class="btn btn-primary" id="saveApiConfigBtn">保存配置</button>
+                        <button class="btn btn-small" id="resetApiConfigBtn">重置</button>
+                        <button class="btn btn-small" id="validateApiConfigBtn">验证配置</button>
+                    </div>
+                    <div class="api-config-status" id="apiConfigStatus" style="margin-top: 0.5rem; color: #666;"></div>
+                </div>
+                
                 <div class="settings-grid">
                     <div class="setting-item">
                         <label for="translationApi">翻译服务：</label>
@@ -179,6 +200,70 @@
                                 </select>
                             </div>
                             
+                            <!-- 频谱分析区域 -->
+                            <div class="spectrum-section" style="margin-top: 2rem;">
+                                <h3>频谱分析</h3>
+                                
+                                <!-- 频谱控制区域 -->
+                                <div class="spectrum-controls" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: center; background: #f8f9ff; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);">
+                                    <div class="control-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                        <label for="visualizationMode" style="font-weight: 600; color: #4a5568; font-size: 0.9rem;">可视化模式:</label>
+                                        <select id="visualizationMode" class="control-select" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px; background: white; font-size: 0.9rem;">
+                                            <option value="bars">频谱柱状图</option>
+                                            <option value="curve">频谱曲线</option>
+                                            <option value="waterfall">瀑布图</option>
+                                            <option value="waveform">时域波形</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="control-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                        <label for="fftSize" style="font-weight: 600; color: #4a5568; font-size: 0.9rem;">FFT大小:</label>
+                                        <select id="fftSize" class="control-select" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px; background: white; font-size: 0.9rem;">
+                                            <option value="128">128</option>
+                                            <option value="256">256</option>
+                                            <option value="512" selected>512</option>
+                                            <option value="1024">1024</option>
+                                            <option value="2048">2048</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="control-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <label for="smoothingTimeConstant" style="font-weight: 600; color: #4a5568; font-size: 0.9rem;">平滑系数:</label>
+                                            <span id="smoothingValue" style="font-weight: 600; color: #2b6cb0;">0.8</span>
+                                        </div>
+                                        <input type="range" id="smoothingTimeConstant" class="control-slider" min="0" max="1" step="0.05" value="0.8" style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; outline: none; -webkit-appearance: none;">
+                                    </div>
+                                    
+                                    <div class="control-group" style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                                        <button class="btn btn-small btn-primary" id="toggleSpectrum" style="padding: 0.5rem 1rem; font-size: 0.9rem;">切换频谱</button>
+                                        <button class="btn btn-small btn-secondary" id="saveSpectrum" style="padding: 0.5rem 1rem; font-size: 0.9rem;">保存快照</button>
+                                        <button class="btn btn-small btn-danger" id="clearSpectrum" style="padding: 0.5rem 1rem; font-size: 0.9rem;">清空</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- 频谱可视化Canvas -->
+                                <div class="spectrum-canvas-container" style="background: #000; border-radius: 8px; padding: 1rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);">
+                                    <canvas id="spectrumCanvas" class="spectrum-canvas" width="800" height="400" style="border-radius: 4px; box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5); background: linear-gradient(to bottom, #0a0a0a, #1a1a1a);"></canvas>
+                                </div>
+                                
+                                <!-- 频谱信息显示 -->
+                                <div class="spectrum-info" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; background: #f8f9ff; padding: 1rem; border-radius: 8px; margin-top: 1rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);">
+                                    <div class="info-item" style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0.75rem; background: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);">
+                                        <span class="info-label" style="font-size: 0.85rem; color: #6b7280; margin-bottom: 0.25rem;">当前峰值频率</span>
+                                        <span id="peakFrequency" style="font-size: 1.25rem; font-weight: 700; color: #2b6cb0;">0 Hz</span>
+                                    </div>
+                                    <div class="info-item" style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0.75rem; background: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);">
+                                        <span class="info-label" style="font-size: 0.85rem; color: #6b7280; margin-bottom: 0.25rem;">峰值能量</span>
+                                        <span id="peakEnergy" style="font-size: 1.25rem; font-weight: 700; color: #48bb78;">0</span>
+                                    </div>
+                                    <div class="info-item" style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0.75rem; background: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);">
+                                        <span class="info-label" style="font-size: 0.85rem; color: #6b7280; margin-bottom: 0.25rem;">平均能量</span>
+                                        <span id="averageEnergy" style="font-size: 1.25rem; font-weight: 700; color: #ed8936;">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <!-- 逐字编辑区域 -->
                             <div class="word-editor-section" style="margin-top: 2rem;">
                                 <h3>歌词编辑</h3>
@@ -198,6 +283,9 @@
                     <select id="outputFormat">
                         <option value="auto">自动（保持原格式）</option>
                         <option value="lrc">LRC</option>
+                        <option value="amll">AMLL</option>
+                        <option value="ttml">TTML</option>
+                        <option value="db">DB</option>
                         <option value="srt">SRT</option>
                         <option value="txt">TXT</option>
                         <option value="ass">ASS</option>
@@ -239,14 +327,21 @@
             <div class="console-header">
                 <h3>控制台</h3>
                 <div class="console-controls">
-                    <span id="proxyStatus" class="status-indicator">代理状态：未检测</span>
-                    <div class="proxy-controls">
-                        <button id="startProxyBtn" class="btn btn-small">启动代理</button>
-                        <button id="stopProxyBtn" class="btn btn-small">停止代理</button>
-                        <button id="restartProxyBtn" class="btn btn-small">重启代理</button>
+                    <div class="proxy-status-section">
+                        <span class="status-label">代理状态：</span>
+                        <span id="proxyStatus" class="status-indicator status-unknown">未检测</span>
+                        <span id="proxyInfo" class="proxy-info">-</span>
                     </div>
-                    <button id="toggleConsole" class="btn btn-small">收起</button>
-                    <button id="clearLog" class="btn btn-small">清空日志</button>
+                    <div class="proxy-controls">
+                        <button id="startProxyBtn" class="btn btn-small btn-primary">启动代理</button>
+                        <button id="stopProxyBtn" class="btn btn-small btn-danger" disabled>停止代理</button>
+                        <button id="restartProxyBtn" class="btn btn-small btn-warning" disabled>重启代理</button>
+                        <button id="checkProxyBtn" class="btn btn-small btn-info">检查代理</button>
+                    </div>
+                    <div class="console-actions">
+                        <button id="toggleConsole" class="btn btn-small">收起</button>
+                        <button id="clearLog" class="btn btn-small">清空日志</button>
+                    </div>
                 </div>
             </div>
             <div class="console-body" id="consoleBody">
@@ -259,11 +354,16 @@
     <script src="md5.js"></script>
     <script src="js/services/aiService.js"></script>
     <script src="js/utils/file.js"></script>
+    <script src="js/utils/timelineManager.js"></script>
+    <script src="js/generators/AMLLGenerator.js"></script>
+    <script src="js/generators/TTMLGenerator.js"></script>
+    <script src="js/generators/DBGenerator.js"></script>
+    <script src="js/players/WordByWordPlayer.js"></script>
     <script src="js/parsers/lrcParser.js"></script>
     <script src="js/parsers/srtParser.js"></script>
     <script src="js/parsers/assParser.js"></script>
     <script src="js/parsers/txtParser.js"></script>
     <script src="js/parsers/parserManager.js"></script>
-    <script src="js/app.js?v=3"></script>
+    <script src="js/app.js?v=4"></script>
 </body>
 </html>
