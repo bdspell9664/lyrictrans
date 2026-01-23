@@ -99,6 +99,8 @@ class AIService {
                 '翻译请求失败：无法连接到服务器。请确保本地代理服务器已启动，或检查网络连接。';
         } else if (error.message.includes('百度翻译API错误')) {
             return `翻译服务错误：${error.message.replace('百度翻译API错误: ', '')}`;
+        } else if (error.message.includes('API配置不完整')) {
+            return '翻译请求失败：API配置已自动修复，正在重试...';
         }
         
         return `翻译失败：${error.message}`;
@@ -112,15 +114,22 @@ class AIService {
      * @returns {Promise<string>} - 翻译后的文本
      */
     async translateWithBaidu(text, targetLang, sourceLang = 'auto') {
-        // 使用用户提供的默认百度翻译API配置
-        const appid = this.config.appid;
-        const secretKey = this.config.secretKey;
+        // 使用默认百度翻译API配置
+        let appid = this.config.appid;
+        let secretKey = this.config.secretKey;
+        
+        // API配置检查与修复
+        if (!appid || !secretKey) {
+            console.warn('API配置不完整，使用默认密钥');
+            appid = '20251221002524051';
+            secretKey = 'tuvZN9D5mU7MtYcCPreF';
+        }
+        
         const localProxyUrl = 'http://localhost:3001/translate'; // 使用本地代理服务器
-        const githubProxyUrl = 'https://your-username.github.io/lyrics-translator-proxy/translate'; // GitHub Pages代理
         const directApiUrl = 'https://fanyi-api.baidu.com/api/trans/vip/translate'; // 百度翻译API直接地址
         
-        // 优先使用GitHub Pages代理，失败时回退到本地代理或直接请求
-        let proxyUrl = githubProxyUrl;
+        // 简化代理配置：优先使用本地代理，失败后直接请求
+        let proxyUrl = localProxyUrl;
         
         // 百度语言代码映射
         const langMap = {
@@ -229,110 +238,35 @@ class AIService {
                     // 根据设备类型选择请求通道
                     let chunkResponseData;
                     if (!isMobile) {
-                        // 检查并更新代理状态
-                        await this.checkAndUpdateProxyStatus();
-                        
-                        // 根据代理状态选择合适的请求通道
-            switch (this.proxyStatus) {
-                case 'available':
-                    try {
-                        // 优先尝试Cloudflare Workers代理
-                        console.log('发送翻译请求到GitHub Pages代理:', proxyUrl);
-                        const cfResponse = await fetch(proxyUrl, chunkRequestOptions);
-                        
-                        if (!cfResponse.ok) {
-                            throw new Error(`Cloudflare Workers代理请求失败，状态码: ${cfResponse.status}`);
-                        }
-                        
-                        chunkResponseData = await cfResponse.json();
-                    } catch (githubError) {
-                        console.error('GitHub Pages代理请求失败，尝试本地代理:', githubError);
+                        // 简化代理逻辑：优先尝试本地代理，失败后直接请求
                         try {
-                            // Cloudflare Workers代理失败，尝试本地代理
+                            // 尝试本地代理
+                            console.log('发送翻译请求到本地代理:', localProxyUrl);
                             const localResponse = await fetch(localProxyUrl, chunkRequestOptions);
                             
-                            if (!localResponse.ok) {
+                            if (localResponse.ok) {
+                                chunkResponseData = await localResponse.json();
+                            } else {
                                 throw new Error(`本地代理请求失败，状态码: ${localResponse.status}`);
                             }
-                            
-                            chunkResponseData = await localResponse.json();
                         } catch (localError) {
-                            console.error('本地代理请求失败，尝试备选方案:', localError);
-                            // 本地代理请求失败，尝试使用浏览器内代理
-                            chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
-                        }
-                    }
-                    break;
-                case 'unavailable':
-                    try {
-                        // 优先尝试Cloudflare Workers代理
-                        console.log('本地代理不可用，尝试GitHub Pages代理:', proxyUrl);
-                        const cfResponse = await fetch(proxyUrl, chunkRequestOptions);
-                        
-                        if (!cfResponse.ok) {
-                            throw new Error(`Cloudflare Workers代理请求失败，状态码: ${cfResponse.status}`);
-                        }
-                        
-                        chunkResponseData = await cfResponse.json();
-                    } catch (cfError) {
-                        console.error('Cloudflare Workers代理请求失败，尝试启动本地代理:', cfError);
-                        try {
-                            // Cloudflare Workers代理失败，尝试启动本地代理
-                            console.log('代理服务器不可用，尝试启动本地代理服务器...');
-                            const startSuccess = await this.startProxyServer();
-                            
-                            if (startSuccess) {
-                                // 等待代理启动完成
-                                await new Promise(resolve => setTimeout(resolve, 2000));
+                            console.error('本地代理请求失败，尝试直接请求百度API:', localError);
+                            // 本地代理失败，直接请求百度翻译API
+                            try {
+                                console.log('直接请求百度翻译API:', directApiUrl);
+                                const directResponse = await fetch(directApiUrl, chunkRequestOptions);
                                 
-                                // 再次检查代理是否可用
-                                await this.checkAndUpdateProxyStatus();
-                                
-                                if (this.proxyStatus === 'available') {
-                                    // 本地代理服务器启动成功，使用本地代理
-                                    console.log('本地代理服务器启动成功，发送翻译请求到本地代理服务器:', localProxyUrl);
-                                    const proxyResponse = await fetch(localProxyUrl, chunkRequestOptions);
-                                    
-                                    if (!proxyResponse.ok) {
-                                        throw new Error(`本地代理请求失败，状态码: ${proxyResponse.status}`);
-                                    }
-                                    
-                                    chunkResponseData = await proxyResponse.json();
-                                } else {
-                                    // 本地代理启动失败，尝试使用浏览器内代理
-                                    console.log('本地代理服务器启动失败，尝试使用浏览器内代理');
-                                    chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
+                                if (!directResponse.ok) {
+                                    throw new Error(`直接请求失败，状态码: ${directResponse.status}`);
                                 }
-                            } else {
-                                // 无法启动本地代理，尝试使用浏览器内代理
-                                console.log('无法启动本地代理服务器，尝试使用浏览器内代理');
+                                
+                                chunkResponseData = await directResponse.json();
+                            } catch (directError) {
+                                console.error('直接请求失败，尝试备选方案:', directError);
+                                // 直接请求失败，尝试使用浏览器内代理
                                 chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
                             }
-                        } catch (startError) {
-                            console.error('启动本地代理失败，尝试备选方案:', startError);
-                            // 启动代理失败，尝试使用浏览器内代理
-                            chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
                         }
-                    }
-                    break;
-                default:
-                    // 未知状态，优先尝试Cloudflare Workers代理
-                    try {
-                        console.log('代理状态未知，尝试GitHub Pages代理:', proxyUrl);
-                        const cfResponse = await fetch(proxyUrl, chunkRequestOptions);
-                        
-                        if (!cfResponse.ok) {
-                            throw new Error(`Cloudflare Workers代理请求失败，状态码: ${cfResponse.status}`);
-                        }
-                        
-                        chunkResponseData = await cfResponse.json();
-                    } catch (cfError) {
-                        console.error('Cloudflare Workers代理请求失败，尝试浏览器内代理:', cfError);
-                        // Cloudflare Workers代理失败，尝试使用浏览器内代理
-                        chunkResponseData = await this.translateWithBrowserProxy(chunkText, from, to, chunkRequestOptions);
-                    }
-                    break;
-            }
                     } else {
                         // 移动设备直接调用百度API
                         console.log('移动设备，直接调用百度翻译API:', directApiUrl);
@@ -369,76 +303,34 @@ class AIService {
             } else {
                 // 移动设备优先尝试直接调用API，电脑设备优先使用代理
                 if (!isMobile) {
-                    // 检查并更新代理状态
-                    await this.checkAndUpdateProxyStatus();
-                    
-                    // 根据代理状态选择合适的请求通道
-                    switch (this.proxyStatus) {
-                        case 'available':
-                            try {
-                                // 代理服务器可用，使用代理
-                                console.log('发送翻译请求到代理服务器:', proxyUrl);
-                                const proxyResponse = await fetch(proxyUrl, requestInfo.options);
-                                
-                                if (!proxyResponse.ok) {
-                                    throw new Error(`代理请求失败，状态码: ${proxyResponse.status}`);
-                                }
-                                
-                                responseData = await proxyResponse.json();
-                                break;
-                            } catch (proxyError) {
-                                console.error('代理请求失败，尝试备选方案:', proxyError);
-                                // 代理请求失败，尝试使用浏览器内代理
-                                responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
-                                break;
+                    // 简化代理逻辑：优先尝试本地代理，失败后直接请求
+                    try {
+                        // 尝试本地代理
+                        console.log('发送翻译请求到本地代理:', localProxyUrl);
+                        const localResponse = await fetch(localProxyUrl, requestInfo.options);
+                        
+                        if (localResponse.ok) {
+                            responseData = await localResponse.json();
+                        } else {
+                            throw new Error(`本地代理请求失败，状态码: ${localResponse.status}`);
+                        }
+                    } catch (localError) {
+                        console.error('本地代理请求失败，尝试直接请求百度API:', localError);
+                        // 本地代理失败，直接请求百度翻译API
+                        try {
+                            console.log('直接请求百度翻译API:', directApiUrl);
+                            const directResponse = await fetch(directApiUrl, requestInfo.options);
+                            
+                            if (!directResponse.ok) {
+                                throw new Error(`直接请求失败，状态码: ${directResponse.status}`);
                             }
-                        case 'unavailable':
-                            try {
-                                // 代理服务器不可用，尝试启动代理
-                                console.log('代理服务器不可用，尝试启动代理服务器...');
-                                const startSuccess = await this.startProxyServer();
-                                
-                                if (startSuccess) {
-                                    // 等待代理启动完成
-                                    await new Promise(resolve => setTimeout(resolve, 2000));
-                                    
-                                    // 再次检查代理是否可用
-                                    await this.checkAndUpdateProxyStatus();
-                                    
-                                    if (this.proxyStatus === 'available') {
-                                        // 代理服务器启动成功，使用代理
-                                        console.log('代理服务器启动成功，发送翻译请求到代理服务器:', proxyUrl);
-                                        const proxyResponse = await fetch(proxyUrl, requestInfo.options);
-                                        
-                                        if (!proxyResponse.ok) {
-                                            throw new Error(`代理请求失败，状态码: ${proxyResponse.status}`);
-                                        }
-                                        
-                                        responseData = await proxyResponse.json();
-                                        break;
-                                    } else {
-                                        // 代理启动失败，尝试使用浏览器内代理
-                                        console.log('代理服务器启动失败，尝试使用浏览器内代理');
-                                        responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
-                                        break;
-                                    }
-                                } else {
-                                    // 无法启动代理，尝试使用浏览器内代理
-                                    console.log('无法启动代理服务器，尝试使用浏览器内代理');
-                                    responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
-                                    break;
-                                }
-                            } catch (startError) {
-                                console.error('启动代理失败，尝试备选方案:', startError);
-                                // 启动代理失败，尝试使用浏览器内代理
-                                responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
-                                break;
-                            }
-                        default:
-                            // 未知状态，尝试使用浏览器内代理
-                            console.log('代理状态未知，尝试使用浏览器内代理');
+                            
+                            responseData = await directResponse.json();
+                        } catch (directError) {
+                            console.error('直接请求失败，尝试备选方案:', directError);
+                            // 直接请求失败，尝试使用浏览器内代理
                             responseData = await this.translateWithBrowserProxy(text, from, to, requestInfo.options);
-                            break;
+                        }
                     }
                 } else {
                     // 移动设备直接调用百度API

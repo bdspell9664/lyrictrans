@@ -663,18 +663,36 @@ class LyricTranslatorApp {
      * 建立代理WebSocket连接
      */
     connectProxyWebSocket() {
+        // 简化WebSocket连接逻辑，减少不必要的重连尝试
+        // 只在开发环境或本地代理运行时才尝试连接
         try {
             // 关闭现有连接
             if (this.proxyWebSocket) {
                 this.proxyWebSocket.close();
             }
             
+            // 仅在本地环境尝试连接WebSocket
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (!isLocalhost) {
+                this.log('info', '非本地环境，跳过WebSocket连接');
+                return;
+            }
+            
             // 创建新的WebSocket连接
             const wsUrl = 'ws://localhost:3002';
             this.proxyWebSocket = new WebSocket(wsUrl);
             
+            // 设置连接超时
+            const timeoutId = setTimeout(() => {
+                if (this.proxyWebSocket.readyState === WebSocket.CONNECTING) {
+                    this.log('warning', 'WebSocket连接超时，放弃连接');
+                    this.proxyWebSocket.close();
+                }
+            }, 3000);
+            
             // 绑定事件监听器
             this.proxyWebSocket.onopen = () => {
+                clearTimeout(timeoutId);
                 this.log('success', '代理WebSocket连接已建立');
                 this.proxyReconnectAttempts = 0;
                 this.requestProxyStatus();
@@ -685,10 +703,12 @@ class LyricTranslatorApp {
             };
             
             this.proxyWebSocket.onclose = () => {
+                clearTimeout(timeoutId);
                 this.onProxyWebSocketClose();
             };
             
             this.proxyWebSocket.onerror = (error) => {
+                clearTimeout(timeoutId);
                 this.onProxyWebSocketError(error);
             };
             
@@ -742,17 +762,24 @@ class LyricTranslatorApp {
             clearTimeout(this.proxyReconnectTimer);
         }
         
-        // 检查重连尝试次数
-        if (this.proxyReconnectAttempts >= this.maxProxyReconnectAttempts) {
-            this.log('error', '达到最大重连尝试次数，停止尝试连接代理WebSocket');
+        // 检查重连尝试次数，减少最大尝试次数
+        if (this.proxyReconnectAttempts >= 3) { // 最多尝试3次
+            this.log('info', '达到最大重连尝试次数，停止尝试连接代理WebSocket');
             // 尝试直接调用HTTP API检查代理状态
             this.checkProxyStatusHttp();
             return;
         }
         
-        // 计算重连延迟（指数退避）
-        const delay = Math.min(1000 * Math.pow(2, this.proxyReconnectAttempts), 30000);
+        // 计算重连延迟（更长的初始延迟，减少频率）
+        const delay = Math.min(2000 * Math.pow(2, this.proxyReconnectAttempts), 8000);
         this.proxyReconnectAttempts++;
+        
+        // 仅在本地环境尝试重连
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (!isLocalhost) {
+            this.log('info', '非本地环境，跳过WebSocket重连');
+            return;
+        }
         
         this.log('info', `尝试重新连接代理WebSocket，尝试次数: ${this.proxyReconnectAttempts}，延迟: ${delay}ms`);
         
