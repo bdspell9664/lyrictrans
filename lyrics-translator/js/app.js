@@ -83,14 +83,6 @@ class LyricTranslatorApp {
         this.includeOriginal = document.getElementById('includeOriginal');
         this.translateBtn = document.getElementById('translateBtn');
         
-        // API密钥配置面板元素
-        this.appidInput = document.getElementById('appidInput');
-        this.secretKeyInput = document.getElementById('secretKeyInput');
-        this.saveApiConfigBtn = document.getElementById('saveApiConfigBtn');
-        this.resetApiConfigBtn = document.getElementById('resetApiConfigBtn');
-        this.validateApiConfigBtn = document.getElementById('validateApiConfigBtn');
-        this.apiConfigStatus = document.getElementById('apiConfigStatus');
-        
         // 结果相关元素
         this.resultSection = document.getElementById('resultSection');
         this.tabBtns = document.querySelectorAll('.tab-btn');
@@ -129,13 +121,11 @@ class LyricTranslatorApp {
         this.clearLogBtn = document.getElementById('clearLog');
         this.consoleLog = document.getElementById('consoleLog');
         this.proxyStatus = document.getElementById('proxyStatus');
-        this.proxyInfo = document.getElementById('proxyInfo');
         
         // 代理控制按钮
         this.startProxyBtn = document.getElementById('startProxyBtn');
         this.stopProxyBtn = document.getElementById('stopProxyBtn');
         this.restartProxyBtn = document.getElementById('restartProxyBtn');
-        this.checkProxyBtn = document.getElementById('checkProxyBtn');
         
         // 验证控制台元素是否成功获取
         console.log('控制台元素获取结果:');
@@ -483,35 +473,6 @@ class LyricTranslatorApp {
             console.log('重启代理按钮事件绑定成功');
         }
         
-        if (this.checkProxyBtn) {
-            this.checkProxyBtn.addEventListener('click', async () => {
-                this.checkProxyStatus();
-            });
-            console.log('检查代理按钮事件绑定成功');
-        }
-        
-        // API密钥配置事件
-        if (this.saveApiConfigBtn) {
-            this.saveApiConfigBtn.addEventListener('click', () => {
-                this.saveApiConfig();
-            });
-            console.log('保存API配置事件绑定成功');
-        }
-        
-        if (this.resetApiConfigBtn) {
-            this.resetApiConfigBtn.addEventListener('click', () => {
-                this.resetApiConfig();
-            });
-            console.log('重置API配置事件绑定成功');
-        }
-        
-        if (this.validateApiConfigBtn) {
-            this.validateApiConfigBtn.addEventListener('click', () => {
-                this.validateApiConfig();
-            });
-            console.log('验证API配置事件绑定成功');
-        }
-        
         // 通知关闭事件
         if (this.notificationClose) {
             this.notificationClose.addEventListener('click', () => {
@@ -626,6 +587,8 @@ class LyricTranslatorApp {
         this.initConsole();
         this.checkProxyStatus();
     }
+    
+
     
     /**
      * 初始化控制台
@@ -873,81 +836,6 @@ class LyricTranslatorApp {
         } else {
             // 如果WebSocket不可用，尝试使用HTTP API
             this.restartProxyHttp();
-        }
-    }
-    
-    /**
-     * 检查代理状态
-     */
-    async checkProxyStatus() {
-        try {
-            // 更新UI状态
-            this.updateProxyStatus('checking', '正在检查代理状态...');
-            
-            // 检查AI服务的代理状态
-            const status = await this.aiService.checkAndUpdateProxyStatus();
-            
-            // 更新UI
-            this.updateProxyStatus(status, `代理服务器状态: ${status === 'available' ? '可用' : status === 'unavailable' ? '不可用' : '未知'}`);
-            
-            // 更新按钮状态
-            this.updateProxyButtons(status);
-        } catch (error) {
-            console.error('检查代理状态失败:', error);
-            this.updateProxyStatus('error', '检查代理状态失败');
-        }
-    }
-    
-    /**
-     * 更新代理状态显示
-     * @param {string} status - 代理状态
-     * @param {string} info - 附加信息
-     */
-    updateProxyStatus(status, info = '') {
-        if (this.proxyStatus) {
-            // 移除旧状态类
-            this.proxyStatus.className = 'status-indicator';
-            
-            // 添加新状态类
-            this.proxyStatus.classList.add(`status-${status}`);
-            
-            // 更新状态文本
-            const statusText = {
-                'available': '可用',
-                'unavailable': '不可用',
-                'unknown': '未检测',
-                'checking': '检查中',
-                'starting': '启动中',
-                'stopping': '停止中',
-                'error': '错误'
-            }[status] || '未知';
-            
-            this.proxyStatus.textContent = statusText;
-        }
-        
-        // 更新代理信息
-        if (this.proxyInfo) {
-            this.proxyInfo.textContent = info || '-';
-        }
-    }
-    
-    /**
-     * 更新代理按钮状态
-     * @param {string} status - 代理状态
-     */
-    updateProxyButtons(status) {
-        const isAvailable = status === 'available';
-        
-        if (this.startProxyBtn) {
-            this.startProxyBtn.disabled = isAvailable;
-        }
-        
-        if (this.stopProxyBtn) {
-            this.stopProxyBtn.disabled = !isAvailable;
-        }
-        
-        if (this.restartProxyBtn) {
-            this.restartProxyBtn.disabled = !isAvailable;
         }
     }
     
@@ -2337,16 +2225,6 @@ class LyricTranslatorApp {
         this.log('info', '开始翻译歌词');
         
         try {
-            // 检查API配置是否完整
-            if (!this.aiService.isConfigComplete()) {
-                this.hideLoading();
-                this.log('error', '翻译失败: API配置不完整');
-                this.showNotification('请先配置API密钥', 'warning');
-                // 滚动到API配置面板
-                this.settingsSection.scrollIntoView({ behavior: 'smooth' });
-                return;
-            }
-            
             // 处理当前文件
             const file = this.uploadedFiles[this.currentFileIndex];
             this.log('info', `处理文件: ${file.name}`);
@@ -2407,29 +2285,20 @@ class LyricTranslatorApp {
             // 显示结果
             this.showResults(text);
             this.log('success', '翻译结果显示完成');
-            this.showNotification('翻译完成', 'success');
         } catch (error) {
             console.error('翻译失败:', error);
             this.log('error', `翻译失败: ${error.message}`);
             
             // 添加更友好的用户提示
-            let userMessage = error.message;
+            let userMessage = `翻译失败: ${error.message}`;
             
-            // 根据错误类型提供不同的解决方案
-            if (error.message.includes('跨域错误') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            if (error.message.includes('跨域错误') || error.message.includes('Failed to fetch')) {
                 userMessage += '\n\n请确保已在项目根目录执行 npm start 启动本地代理服务器';
                 userMessage += '\n启动命令：npm start';
                 userMessage += '\n启动后代理服务器将运行在 http://localhost:3001/translate';
-            } else if (error.message.includes('APP ID和密钥不能为空')) {
-                userMessage += '\n\n请前往翻译设置页面配置百度翻译API密钥';
-            } else if (error.message.includes('未授权的访问') || error.message.includes('签名错误')) {
-                userMessage += '\n\n请检查您的百度翻译API密钥是否正确';
-            } else if (error.message.includes('请求频率过高')) {
-                userMessage += '\n\n翻译请求频率过高，请稍后重试';
             }
             
-            // 使用更友好的通知代替alert
-            this.showNotification(userMessage, 'error');
+            alert(userMessage);
         } finally {
             this.hideLoading();
         }
@@ -2991,108 +2860,6 @@ class LyricTranslatorApp {
         this.generateFallbackWordTimestamps();
         this.initTimelineEditor();
         this.showNotification('时间轴已重置', 'success');
-    }
-    
-    /**
-     * 保存API配置
-     */
-    saveApiConfig() {
-        try {
-            const appid = this.appidInput.value.trim();
-            const secretKey = this.secretKeyInput.value.trim();
-            
-            if (!appid || !secretKey) {
-                this.updateApiConfigStatus('APP ID和密钥不能为空', 'error');
-                return;
-            }
-            
-            // 更新AI服务配置
-            this.aiService.updateConfig({ appid, secretKey });
-            this.updateApiConfigStatus('API配置已保存', 'success');
-            
-            // 记录日志
-            this.log('info', 'API配置已保存');
-        } catch (error) {
-            console.error('保存API配置失败:', error);
-            this.updateApiConfigStatus('保存API配置失败: ' + error.message, 'error');
-        }
-    }
-    
-    /**
-     * 重置API配置
-     */
-    resetApiConfig() {
-        try {
-            // 清空输入字段
-            this.appidInput.value = '';
-            this.secretKeyInput.value = '';
-            
-            // 更新AI服务配置
-            this.aiService.updateConfig({ appid: '', secretKey: '' });
-            this.updateApiConfigStatus('API配置已重置', 'info');
-            
-            // 记录日志
-            this.log('info', 'API配置已重置');
-        } catch (error) {
-            console.error('重置API配置失败:', error);
-            this.updateApiConfigStatus('重置API配置失败: ' + error.message, 'error');
-        }
-    }
-    
-    /**
-     * 验证API配置
-     */
-    async validateApiConfig() {
-        try {
-            this.updateApiConfigStatus('正在验证API配置...', 'info');
-            
-            // 检查输入是否为空
-            const appid = this.appidInput.value.trim();
-            const secretKey = this.secretKeyInput.value.trim();
-            
-            if (!appid || !secretKey) {
-                this.updateApiConfigStatus('APP ID和密钥不能为空', 'error');
-                return;
-            }
-            
-            // 更新AI服务配置
-            this.aiService.updateConfig({ appid, secretKey });
-            
-            // 验证API配置
-            const isValid = await this.aiService.validateApiKey();
-            
-            if (isValid) {
-                this.updateApiConfigStatus('API配置验证成功', 'success');
-                this.log('success', 'API配置验证成功');
-            } else {
-                this.updateApiConfigStatus('API配置验证失败，请检查APP ID和密钥是否正确', 'error');
-                this.log('error', 'API配置验证失败');
-            }
-        } catch (error) {
-            console.error('验证API配置失败:', error);
-            this.updateApiConfigStatus('验证API配置失败: ' + error.message, 'error');
-            this.log('error', '验证API配置失败: ' + error.message);
-        }
-    }
-    
-    /**
-     * 更新API配置状态
-     * @param {string} message - 状态消息
-     * @param {string} type - 状态类型: success, error, info
-     */
-    updateApiConfigStatus(message, type) {
-        if (this.apiConfigStatus) {
-            this.apiConfigStatus.textContent = message;
-            this.apiConfigStatus.className = `api-config-status ${type}`;
-            
-            // 3秒后清除状态消息
-            setTimeout(() => {
-                if (this.apiConfigStatus) {
-                    this.apiConfigStatus.textContent = '';
-                    this.apiConfigStatus.className = 'api-config-status';
-                }
-            }, 3000);
-        }
     }
 }
 

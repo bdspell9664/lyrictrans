@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lyrics Translator Proxy</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-top: 50px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        p {
+            color: #666;
+            line-height: 1.6;
+        }
+        .code {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: monospace;
+        }
+        .endpoint {
+            background-color: #e8f4f8;
+            padding: 10px;
+            border-left: 4px solid #3498db;
+            margin: 20px 0;
+        }
+        .example {
+            background-color: #f8f4e8;
+            padding: 10px;
+            border-left: 4px solid #f39c12;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lyrics Translator Proxy</h1>
+        <p>这是一个用于歌词翻译工具的GitHub Pages代理服务器，用于解决跨域问题。</p>
+
+        <div class="endpoint">
+            <h2>API Endpoint</h2>
+            <p><strong>POST</strong> /translate</p>
+        </div>
+
+        <div class="code">
+            <h3>请求参数</h3>
+            <pre>
+q: 要翻译的文本
+from: 源语言（默认：auto）
+to: 目标语言
+appid: 百度翻译APP ID
+secretKey: 百度翻译密钥
+salt: 随机数
+sign: 签名
+            </pre>
+        </div>
+
+        <div class="example">
+            <h3>使用示例</h3>
+            <pre>
+fetch('https://your-username.github.io/lyrics-translator-proxy/translate', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({
+        q: 'Hello World',
+        from: 'en',
+        to: 'zh',
+        appid: 'your-app-id',
+        secretKey: 'your-secret-key',
+        salt: '123456',
+        sign: 'your-sign'
+    })
+})
+.then(response => response.json())
+.then(data => console.log(data));
+            </pre>
+        </div>
+
+        <h2>部署说明</h2>
+        <ol>
+            <li>将此仓库fork到您的GitHub账户</li>
+            <li>进入仓库设置，开启GitHub Pages</li>
+            <li>在歌词翻译工具的配置中，将代理URL设置为您的GitHub Pages URL</li>
+        </ol>
+
+        <h2>注意事项</h2>
+        <ul>
+            <li>此代理仅用于歌词翻译工具</li>
+            <li>请勿滥用，遵守百度翻译API的使用条款</li>
+            <li>由于GitHub Pages的限制，代理请求可能会有延迟</li>
+        </ul>
+    </div>
+    <script src="proxy.js"></script>
+</body>
+</html>
