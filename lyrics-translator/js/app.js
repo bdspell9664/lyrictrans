@@ -37,8 +37,16 @@ class LyricTranslatorApp {
         }
         this.parserManager = new ParserManager();
         
+        // 代理状态管理
+        this.proxyStatus = 'unknown';
+        this.proxyWebSocket = null;
+        this.proxyReconnectTimer = null;
+        this.proxyReconnectAttempts = 0;
+        this.maxProxyReconnectAttempts = 5;
+        
         this.initElements();
         this.bindEvents();
+        this.initProxyWebSocket();
     }
 
     /**
@@ -111,6 +119,11 @@ class LyricTranslatorApp {
         this.consoleLog = document.getElementById('consoleLog');
         this.proxyStatus = document.getElementById('proxyStatus');
         
+        // 代理控制按钮
+        this.startProxyBtn = document.getElementById('startProxyBtn');
+        this.stopProxyBtn = document.getElementById('stopProxyBtn');
+        this.restartProxyBtn = document.getElementById('restartProxyBtn');
+        
         // 验证控制台元素是否成功获取
         console.log('控制台元素获取结果:');
         console.log('consoleContainer:', this.consoleContainer);
@@ -118,6 +131,9 @@ class LyricTranslatorApp {
         console.log('clearLogBtn:', this.clearLogBtn);
         console.log('consoleLog:', this.consoleLog);
         console.log('proxyStatus:', this.proxyStatus);
+        console.log('startProxyBtn:', this.startProxyBtn);
+        console.log('stopProxyBtn:', this.stopProxyBtn);
+        console.log('restartProxyBtn:', this.restartProxyBtn);
         
         // 下载进度元素
         this.downloadProgress = document.getElementById('downloadProgress');
@@ -397,6 +413,28 @@ class LyricTranslatorApp {
             console.log('清空日志事件绑定成功');
         }
         
+        // 代理控制按钮事件
+        if (this.startProxyBtn) {
+            this.startProxyBtn.addEventListener('click', () => {
+                this.requestProxyStart();
+            });
+            console.log('启动代理按钮事件绑定成功');
+        }
+        
+        if (this.stopProxyBtn) {
+            this.stopProxyBtn.addEventListener('click', () => {
+                this.requestProxyStop();
+            });
+            console.log('停止代理按钮事件绑定成功');
+        }
+        
+        if (this.restartProxyBtn) {
+            this.restartProxyBtn.addEventListener('click', () => {
+                this.requestProxyRestart();
+            });
+            console.log('重启代理按钮事件绑定成功');
+        }
+        
         // 通知关闭事件
         if (this.notificationClose) {
             this.notificationClose.addEventListener('click', () => {
@@ -517,11 +555,248 @@ class LyricTranslatorApp {
      * 检查代理服务器状态
      */
     async checkProxyStatus() {
-        if (!this.proxyStatus) return;
+        // 使用新的HTTP API检查方法替代旧方法
+        this.checkProxyStatusHttp();
+    }
+    
+    /**
+     * 初始化代理WebSocket连接
+     */
+    initProxyWebSocket() {
+        this.connectProxyWebSocket();
+    }
+    
+    /**
+     * 建立代理WebSocket连接
+     */
+    connectProxyWebSocket() {
+        try {
+            // 关闭现有连接
+            if (this.proxyWebSocket) {
+                this.proxyWebSocket.close();
+            }
+            
+            // 创建新的WebSocket连接
+            const wsUrl = 'ws://localhost:3002';
+            this.proxyWebSocket = new WebSocket(wsUrl);
+            
+            // 绑定事件监听器
+            this.proxyWebSocket.onopen = () => {
+                this.log('success', '代理WebSocket连接已建立');
+                this.proxyReconnectAttempts = 0;
+                this.requestProxyStatus();
+            };
+            
+            this.proxyWebSocket.onmessage = (event) => {
+                this.onProxyWebSocketMessage(event);
+            };
+            
+            this.proxyWebSocket.onclose = () => {
+                this.onProxyWebSocketClose();
+            };
+            
+            this.proxyWebSocket.onerror = (error) => {
+                this.onProxyWebSocketError(error);
+            };
+            
+        } catch (error) {
+            this.log('error', `代理WebSocket连接失败: ${error.message}`);
+            this.reconnectProxyWebSocket();
+        }
+    }
+    
+    /**
+     * 处理代理WebSocket消息
+     * @param {Event} event - WebSocket消息事件
+     */
+    onProxyWebSocketMessage(event) {
+        try {
+            const data = JSON.parse(event.data);
+            this.updateProxyStatusDisplay(data.status);
+            
+            // 如果代理状态是error，尝试启动代理
+            if (data.status === 'error' || data.status === 'stopped') {
+                this.requestProxyStart();
+            }
+        } catch (error) {
+            this.log('error', `解析代理WebSocket消息失败: ${error.message}`);
+        }
+    }
+    
+    /**
+     * 处理代理WebSocket关闭
+     */
+    onProxyWebSocketClose() {
+        this.log('warning', '代理WebSocket连接已关闭');
+        this.updateProxyStatusDisplay('unknown');
+        this.reconnectProxyWebSocket();
+    }
+    
+    /**
+     * 处理代理WebSocket错误
+     * @param {Event} error - WebSocket错误事件
+     */
+    onProxyWebSocketError(error) {
+        this.log('error', `代理WebSocket错误: ${error.message}`);
+    }
+    
+    /**
+     * 重新连接代理WebSocket
+     */
+    reconnectProxyWebSocket() {
+        // 清除现有定时器
+        if (this.proxyReconnectTimer) {
+            clearTimeout(this.proxyReconnectTimer);
+        }
         
-        this.proxyStatus.textContent = '代理状态：检查中...';
-        this.proxyStatus.className = 'status-indicator checking';
-        this.log('info', '开始检查代理服务器状态');
+        // 检查重连尝试次数
+        if (this.proxyReconnectAttempts >= this.maxProxyReconnectAttempts) {
+            this.log('error', '达到最大重连尝试次数，停止尝试连接代理WebSocket');
+            // 尝试直接调用HTTP API检查代理状态
+            this.checkProxyStatusHttp();
+            return;
+        }
+        
+        // 计算重连延迟（指数退避）
+        const delay = Math.min(1000 * Math.pow(2, this.proxyReconnectAttempts), 30000);
+        this.proxyReconnectAttempts++;
+        
+        this.log('info', `尝试重新连接代理WebSocket，尝试次数: ${this.proxyReconnectAttempts}，延迟: ${delay}ms`);
+        
+        this.proxyReconnectTimer = setTimeout(() => {
+            this.connectProxyWebSocket();
+        }, delay);
+    }
+    
+    /**
+     * 更新代理状态显示
+     * @param {string} status - 代理状态：stopped, starting, running, error, unknown
+     */
+    updateProxyStatusDisplay(status) {
+        const statusElement = document.getElementById('proxyStatus');
+        if (!statusElement) return;
+        
+        this.proxyStatus = status;
+        let statusText = '代理状态：未知';
+        let statusClass = 'status-indicator unknown';
+        
+        switch (status) {
+            case 'running':
+                statusText = '代理状态：在线';
+                statusClass = 'status-indicator online';
+                this.log('success', '代理服务器在线，可以正常使用翻译功能');
+                break;
+            case 'starting':
+                statusText = '代理状态：启动中...';
+                statusClass = 'status-indicator starting';
+                this.log('info', '代理服务器正在启动');
+                break;
+            case 'stopped':
+                statusText = '代理状态：离线';
+                statusClass = 'status-indicator offline';
+                this.log('warning', '代理服务器已停止');
+                break;
+            case 'error':
+                statusText = '代理状态：错误';
+                statusClass = 'status-indicator error';
+                this.log('error', '代理服务器出现错误');
+                break;
+            default:
+                statusText = '代理状态：未知';
+                statusClass = 'status-indicator unknown';
+                this.log('warning', '代理服务器状态未知');
+        }
+        
+        statusElement.textContent = statusText;
+        statusElement.className = statusClass;
+    }
+    
+    /**
+     * 请求代理状态
+     */
+    requestProxyStatus() {
+        if (this.proxyWebSocket && this.proxyWebSocket.readyState === WebSocket.OPEN) {
+            this.proxyWebSocket.send(JSON.stringify({ action: 'status' }));
+        }
+    }
+    
+    /**
+     * 请求启动代理服务器
+     */
+    requestProxyStart() {
+        if (this.proxyWebSocket && this.proxyWebSocket.readyState === WebSocket.OPEN) {
+            this.log('info', '请求启动代理服务器');
+            this.proxyWebSocket.send(JSON.stringify({ action: 'start' }));
+        } else {
+            // 如果WebSocket不可用，尝试使用HTTP API
+            this.startProxyHttp();
+        }
+    }
+    
+    /**
+     * 请求重启代理服务器
+     */
+    requestProxyRestart() {
+        if (this.proxyWebSocket && this.proxyWebSocket.readyState === WebSocket.OPEN) {
+            this.log('info', '请求重启代理服务器');
+            this.proxyWebSocket.send(JSON.stringify({ action: 'restart' }));
+        } else {
+            // 如果WebSocket不可用，尝试使用HTTP API
+            this.restartProxyHttp();
+        }
+    }
+    
+    /**
+     * 请求停止代理服务器
+     */
+    requestProxyStop() {
+        if (this.proxyWebSocket && this.proxyWebSocket.readyState === WebSocket.OPEN) {
+            this.log('info', '请求停止代理服务器');
+            this.proxyWebSocket.send(JSON.stringify({ action: 'stop' }));
+        } else {
+            // 如果WebSocket不可用，尝试使用HTTP API
+            this.stopProxyHttp();
+        }
+    }
+    
+    /**
+     * 使用HTTP API停止代理服务器
+     */
+    async stopProxyHttp() {
+        try {
+            this.log('info', '尝试使用HTTP API停止代理服务器');
+            const response = await fetch('http://localhost:3003/api/proxy/stop', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                this.log('success', '代理服务器停止请求已发送');
+                // 重新检查状态
+                setTimeout(() => {
+                    this.checkProxyStatusHttp();
+                }, 1000);
+            } else {
+                const errorData = await response.json();
+                this.log('error', `停止代理服务器失败: ${errorData.error}`);
+            }
+        } catch (error) {
+            this.log('error', `使用HTTP API停止代理服务器失败: ${error.message}`);
+        }
+    }
+    
+    /**
+     * 使用HTTP API检查代理状态（WebSocket不可用时的备选方案）
+     */
+    async checkProxyStatusHttp() {
+        const statusElement = document.getElementById('proxyStatus');
+        if (!statusElement) return;
+        
+        statusElement.textContent = '代理状态：检查中...';
+        statusElement.className = 'status-indicator checking';
+        this.log('info', '开始使用HTTP API检查代理服务器状态');
         
         try {
             // 使用 AbortController 实现超时
@@ -538,15 +813,12 @@ class LyricTranslatorApp {
             clearTimeout(timeoutId);
             
             if (response.ok) {
-                this.proxyStatus.textContent = '代理状态：在线';
-                this.proxyStatus.className = 'status-indicator online';
-                this.log('success', '代理服务器在线，可以正常使用翻译功能');
+                this.updateProxyStatusDisplay('running');
             } else {
                 throw new Error(`代理服务器响应错误: ${response.status}`);
             }
         } catch (error) {
-            this.proxyStatus.textContent = '代理状态：离线';
-            this.proxyStatus.className = 'status-indicator offline';
+            this.updateProxyStatusDisplay('stopped');
             
             if (error.name === 'AbortError') {
                 this.log('warning', '代理服务器检测超时，可能离线或网络连接问题');
@@ -554,10 +826,64 @@ class LyricTranslatorApp {
                 this.log('error', `代理服务器检测失败: ${error.message}`);
             }
             
-            // 添加用户操作提示
-            this.log('warning', '请在项目根目录执行 npm start 启动代理服务器');
-            this.log('info', '启动后代理服务器将运行在 http://localhost:3001/translate');
-            this.log('info', '启动命令：npm start');
+            // 尝试启动代理
+            this.startProxyHttp();
+        }
+    }
+    
+    /**
+     * 使用HTTP API启动代理服务器
+     */
+    async startProxyHttp() {
+        try {
+            this.log('info', '尝试使用HTTP API启动代理服务器');
+            const response = await fetch('http://localhost:3003/api/proxy/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                this.log('success', '代理服务器启动请求已发送');
+                // 重新检查状态
+                setTimeout(() => {
+                    this.checkProxyStatusHttp();
+                }, 2000);
+            } else {
+                const errorData = await response.json();
+                this.log('error', `启动代理服务器失败: ${errorData.error}`);
+            }
+        } catch (error) {
+            this.log('error', `使用HTTP API启动代理服务器失败: ${error.message}`);
+        }
+    }
+    
+    /**
+     * 使用HTTP API重启代理服务器
+     */
+    async restartProxyHttp() {
+        try {
+            this.log('info', '尝试使用HTTP API重启代理服务器');
+            const response = await fetch('http://localhost:3003/api/proxy/restart', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                this.log('success', '代理服务器重启请求已发送');
+                // 重新检查状态
+                setTimeout(() => {
+                    this.checkProxyStatusHttp();
+                }, 2000);
+            } else {
+                const errorData = await response.json();
+                this.log('error', `重启代理服务器失败: ${errorData.error}`);
+            }
+        } catch (error) {
+            this.log('error', `使用HTTP API重启代理服务器失败: ${error.message}`);
         }
     }
     
