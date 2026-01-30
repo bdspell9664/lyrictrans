@@ -122,11 +122,11 @@ class LRCParser {
             if (line.type === 'lyric') {
                 // 重建歌词行的时间戳
                 const timeTags = line.timestamps.map(ts => {
-                    // 格式化时间戳为标准格式：[mm:ss.xx]
+                    // 格式化时间戳为标准格式：[mm:ss.xxx]
                     const minutes = Math.floor(ts.totalMilliseconds / 60000);
                     const seconds = Math.floor((ts.totalMilliseconds % 60000) / 1000);
-                    const centiseconds = Math.floor((ts.totalMilliseconds % 1000) / 10);
-                    return `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}]`;
+                    const milliseconds = ts.totalMilliseconds % 1000;
+                    return `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}]`;
                 }).join('');
                 
                 // 检查是否有逐字时间戳
@@ -140,11 +140,11 @@ class LRCParser {
                     // 生成逐字歌词行
                     let wordLine = '';
                     line.wordTimestamps.forEach(wordTimestamp => {
-                        // 格式化时间戳为标准格式：[mm:ss.xx]
+                        // 格式化时间戳为标准格式：[mm:ss.xxx]
                         const minutes = Math.floor(wordTimestamp.startTime / 60000);
                         const seconds = Math.floor((wordTimestamp.startTime % 60000) / 1000);
-                        const centiseconds = Math.floor((wordTimestamp.startTime % 1000) / 10);
-                        const wordTimeTag = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}]`;
+                        const milliseconds = Math.floor(wordTimestamp.startTime % 1000);
+                        const wordTimeTag = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}]`;
                         
                         wordLine += `${wordTimeTag}${wordTimestamp.word}`;
                     });
@@ -185,7 +185,16 @@ class LRCParser {
             }
         });
 
-        return lines.join('\n');
+        // 确保每行不超过100个字符，避免播放器显示问题
+        const processedLines = lines.map(line => {
+            if (line.length > 100) {
+                // 截断过长的行
+                return line.substring(0, 97) + '...';
+            }
+            return line;
+        });
+
+        return processedLines.join('\n');
     }
 
     /**

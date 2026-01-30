@@ -11,6 +11,7 @@ class WordByWordPlayer {
      * @param {HTMLElement} options.currentLineElement - 当前行显示元素
      * @param {HTMLElement} options.nextLineElement - 下一行显示元素
      * @param {HTMLElement} options.lyricsContainer - 歌词容器元素
+     * @param {HTMLElement} options.timecodeElement - 时间码显示元素
      * @param {function} options.onLineChange - 行切换回调函数
      * @param {function} options.onWordChange - 字切换回调函数
      */
@@ -20,6 +21,7 @@ class WordByWordPlayer {
         this.currentLineElement = options.currentLineElement;
         this.nextLineElement = options.nextLineElement;
         this.lyricsContainer = options.lyricsContainer;
+        this.timecodeElement = options.timecodeElement;
         this.onLineChange = options.onLineChange || (() => {});
         this.onWordChange = options.onWordChange || (() => {});
         
@@ -226,23 +228,45 @@ class WordByWordPlayer {
                 margin-top: 5px;
             }
             
-            /* 逐字高亮效果 */
+            /* 逐字高亮效果 - KTV样式 */
             .word-by-word-word {
-                transition: color 0.3s ease;
+                transition: all 0.3s ease;
                 display: inline-block;
                 position: relative;
+                color: #888888;
+                text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
             }
             
             .word-by-word-word.highlighted {
-                color: #FF0000;
-                transform: scale(1.1);
-                text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+                color: #FF6B6B;
+                transform: scale(1.05);
+                text-shadow: 0 0 8px rgba(255, 107, 107, 0.7);
+                background: linear-gradient(to bottom, rgba(255, 107, 107, 0.2), transparent);
+                border-radius: 2px;
+                padding: 0 2px;
             }
             
             .word-by-word-word.current {
-                color: #FFFF00;
+                color: #FFD93D;
                 font-weight: bold;
-                text-shadow: 0 0 10px rgba(255, 255, 0, 0.8);
+                transform: scale(1.1);
+                text-shadow: 0 0 12px rgba(255, 217, 61, 0.9);
+                background: linear-gradient(to bottom, rgba(255, 217, 61, 0.3), transparent);
+                border-radius: 3px;
+                padding: 0 3px;
+                animation: pulse 1s infinite;
+            }
+            
+            @keyframes pulse {
+                0% {
+                    text-shadow: 0 0 12px rgba(255, 217, 61, 0.9);
+                }
+                50% {
+                    text-shadow: 0 0 16px rgba(255, 217, 61, 1);
+                }
+                100% {
+                    text-shadow: 0 0 12px rgba(255, 217, 61, 0.9);
+                }
             }
             
             /* 滚动条样式 */
@@ -262,6 +286,21 @@ class WordByWordPlayer {
             
             .word-by-word-container::-webkit-scrollbar-thumb:hover {
                 background: rgba(255, 255, 255, 0.5);
+            }
+            
+            /* 时间码样式 */
+            .word-by-word-timecode {
+                font-size: 14px;
+                font-family: 'Courier New', monospace;
+                color: #FFD93D;
+                text-align: center;
+                margin: 10px 0;
+                padding: 5px 15px;
+                background: rgba(0, 0, 0, 0.5);
+                border-radius: 20px;
+                display: inline-block;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+                text-shadow: 0 0 5px rgba(255, 217, 61, 0.5);
             }
         `;
         
@@ -358,6 +397,44 @@ class WordByWordPlayer {
         
         // 更新逐字高亮
         this._updateWordHighlight(currentLine);
+        
+        // 更新时间码显示
+        this._updateTimecode();
+    }
+    
+    /**
+     * 更新时间码显示
+     * @private
+     */
+    _updateTimecode() {
+        if (!this.timecodeElement) {
+            return;
+        }
+        
+        // 格式化当前时间
+        const formattedTime = this._formatTime(this.currentTime);
+        
+        // 格式化总时间
+        const totalTime = this.audioElement ? this.audioElement.duration * 1000 : 0;
+        const formattedTotalTime = this._formatTime(totalTime);
+        
+        // 更新时间码显示
+        this.timecodeElement.textContent = `${formattedTime} / ${formattedTotalTime}`;
+    }
+    
+    /**
+     * 格式化时间为 mm:ss.xxx 格式
+     * @param {number} milliseconds - 毫秒时间
+     * @returns {string} - 格式化后的时间字符串
+     * @private
+     */
+    _formatTime(milliseconds) {
+        const totalSeconds = Math.floor(milliseconds / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        const ms = Math.floor(milliseconds % 1000);
+        
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
     }
     
     /**
