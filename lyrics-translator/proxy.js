@@ -70,37 +70,65 @@ const server = http.createServer((req, res) => {
         return;
     }
     
-    // 处理GET请求（用于健康检查）
-    if (req.method === 'GET') {
-        log('info', '处理GET请求');
-        // 只允许/translate路径的GET请求，用于健康检查
-        if (req.url === '/translate' || req.url === '/status' || req.url === '/ping') {
+    // 解析URL
+    const parsedUrl = url.parse(req.url);
+    const pathname = parsedUrl.pathname;
+    
+    // 处理不同的路径
+    if (pathname === '/translate') {
+        // 处理POST请求
+        if (req.method === 'POST') {
+            // 收集请求体的逻辑保留在后面
+        } else if (req.method === 'OPTIONS') {
+            // 预检请求已经在前面处理了
+            return;
+        } else if (req.method === 'GET' || req.method === 'HEAD') {
+            // GET请求用于健康检查
             res.writeHead(200, {
                 'Content-Type': 'application/json; charset=utf-8',
                 'Access-Control-Allow-Origin': '*'
             });
-            res.end(JSON.stringify({ 
-                status: 'ok', 
-                message: 'Proxy server is running',
-                timestamp: new Date().toISOString() 
-            }));
+            if (req.method === 'GET') {
+                res.end(JSON.stringify({ 
+                    status: 'ok', 
+                    message: 'Proxy server is running',
+                    timestamp: new Date().toISOString() 
+                }));
+            } else {
+                res.end();
+            }
             return;
         } else {
-            return handleError(res, '请求路径不正确', 404);
+            return handleError(res, '翻译接口只支持POST、GET、HEAD和OPTIONS请求', 405);
         }
-    }
-    
-    // 只处理POST请求
-    if (req.method !== 'POST') {
-        return handleError(res, '只支持POST请求', 405);
-    }
-    
-    // 解析URL
-    const parsedUrl = url.parse(req.url);
-    
-    // 只处理翻译请求
-    if (parsedUrl.pathname !== '/translate') {
-        return handleError(res, '请求路径不正确', 404);
+    } else if (pathname === '/health' || pathname === '/api/health' || pathname === '/status' || pathname === '/ping') {
+        // 健康检查端点，支持GET和HEAD请求
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+            return handleError(res, '健康检查接口只支持GET和HEAD请求', 405);
+        }
+        
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Access-Control-Allow-Origin': '*',
+            'Server': 'LyricsTranslator/1.0',
+            'X-Proxy-Version': '1.0.0'
+        });
+        
+        if (req.method === 'GET') {
+            res.end(JSON.stringify({
+                status: 'ok',
+                message: 'Proxy server is running',
+                timestamp: new Date().toISOString(),
+                version: '1.0.0',
+                uptime: process.uptime(),
+                memory: process.memoryUsage()
+            }));
+        } else {
+            res.end();
+        }
+        return;
+    } else {
+        return handleError(res, '请求路径不正确，支持的路径: /translate, /ping, /status, /health, /api/health', 404);
     }
     
     // 收集请求体

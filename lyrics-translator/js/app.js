@@ -917,26 +917,39 @@ async checkProxyStatusHttp() {
     const statusElement = document.getElementById('proxyStatus');
     if (!statusElement) return;
     
+    // 检查状态缓存，避免频繁检测
+    if (this.proxyStatusCache && Date.now() - this.proxyStatusCache.timestamp < 30000) {
+        this.log('info', '使用缓存的代理服务器状态');
+        this.updateProxyStatusDisplay(this.proxyStatusCache.status);
+        return;
+    }
+    
     statusElement.textContent = '代理状态：检查中...';
     statusElement.className = 'status-indicator checking';
     this.log('info', '开始使用HTTP API检查代理服务器状态');
     
-    // 尝试不同的路径和方法进行检查
+    // 尝试不同的路径和方法进行检查，调整优先级
     const checkUrls = [
-        { url: 'http://localhost:3001/translate', method: 'HEAD' },
-        { url: 'http://localhost:3001/status', method: 'GET' },
-        { url: 'http://localhost:3001/ping', method: 'GET' }
+        { url: 'http://localhost:3001/ping', method: 'GET', priority: 'high' },
+        { url: 'http://localhost:3001/status', method: 'GET', priority: 'high' },
+        { url: 'http://localhost:3001/health', method: 'GET', priority: 'high' },
+        { url: 'http://localhost:3001/api/health', method: 'GET', priority: 'high' },
+        { url: 'http://localhost:3001/translate', method: 'OPTIONS', priority: 'medium' },
+        { url: 'http://localhost:3001', method: 'HEAD', priority: 'low' },
+        { url: 'http://localhost:3003/api/proxy/status', method: 'GET', priority: 'medium' }
     ];
     
     let isRunning = false;
     let lastError = null;
+    let checkResults = [];
     
     // 尝试所有检查URL
     for (const checkConfig of checkUrls) {
         try {
-            // 使用 AbortController 实现超时
+            // 使用 AbortController 实现超时，根据优先级调整超时时间
+            const timeout = checkConfig.priority === 'high' ? 2000 : checkConfig.priority === 'medium' ? 3000 : 5000;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
             
             // 检查代理服务器
             const response = await fetch(checkConfig.url, {
@@ -952,19 +965,41 @@ async checkProxyStatusHttp() {
             // 只要服务器返回2xx或3xx状态码，就认为代理正在运行
             if (response.status >= 200 && response.status < 500) {
                 isRunning = true;
+                this.log('success', `代理服务器检测成功: ${checkConfig.url} (状态码: ${response.status})`);
+                checkResults.push({ url: checkConfig.url, status: 'success', code: response.status });
                 break;
             } else {
-                lastError = new Error(`代理服务器响应错误: ${response.status}`);
+                const errorMsg = `代理服务器响应错误: ${response.status}`;
+                lastError = new Error(errorMsg);
+                this.log('debug', `${checkConfig.url} 响应状态: ${response.status}`);
+                checkResults.push({ url: checkConfig.url, status: 'error', code: response.status });
             }
         } catch (error) {
+            const errorMsg = error.name === 'AbortError' ? '请求超时' : error.message;
+            this.log('debug', `${checkConfig.url} 检查失败: ${errorMsg}`);
             lastError = error;
+            checkResults.push({ url: checkConfig.url, status: 'failed', error: errorMsg });
         }
     }
     
+    // 记录检查结果
+    this.log('debug', `代理服务器检查结果: ${JSON.stringify(checkResults)}`);
+    
+    // 更新状态显示和缓存
     if (isRunning) {
         this.updateProxyStatusDisplay('running');
+        // 缓存成功状态，有效期30秒
+        this.proxyStatusCache = {
+            status: 'running',
+            timestamp: Date.now()
+        };
     } else {
         this.updateProxyStatusDisplay('stopped');
+        // 缓存失败状态，有效期10秒
+        this.proxyStatusCache = {
+            status: 'stopped',
+            timestamp: Date.now()
+        };
         
         if (lastError) {
             if (lastError.name === 'AbortError') {
@@ -976,8 +1011,13 @@ async checkProxyStatusHttp() {
             this.log('error', '代理服务器检测失败: 未知错误');
         }
         
-        // 尝试启动代理
-        this.startProxyHttp();
+        // 尝试启动代理，但增加延迟，避免频繁启动
+        if (!this.isProxyStartAttempted || Date.now() - this.isProxyStartAttempted > 15000) {
+            this.isProxyStartAttempted = Date.now();
+            setTimeout(() => {
+                this.startProxyHttp();
+            }, 1000);
+        }
     }
 }
     
@@ -987,11 +1027,170 @@ async checkProxyStatusHttp() {
     async startProxyHttp() {
         try {
             this.log('info', '尝试使用HTTP API启动代理服务器');
+            
+            // 先检查是否已经在运行，避免重复启动
+            const isAlreadyRunning = await this.checkProxyRunningSimple();
+            if (isAlreadyRunning) {
+                this.log('success', '代理服务器已经在运行，无需再次启动');
+                this.updateProxyStatusDisplay('running');
+                return;
+            }
+            
+            // 尝试不同的启动端点
+            const startUrls = [
+                { url: 'http://localhost:3003/api/proxy/start', method: 'POST', priority: 'high' },
+                { url: 'http://localhost:3003/api/proxy/restart', method: 'POST', priority: 'medium' }
+            ];
+            
+            let startSuccess = false;
+            let lastStartError = null;
+            let startResults = [];
+            
+            for (const startConfig of startUrls) {
+                try {
+                    // 使用 AbortController 实现超时
+                    const controller = new AbortController();
+                    const timeout = 5000;
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
+                    
+                    this.log('info', `尝试使用 ${startConfig.url} 启动代理服务器`);
+                    
+                    const response = await fetch(startConfig.url, {
+                        method: startConfig.method,
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        signal: controller.signal
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (response.ok) {
+                        const responseData = await response.json().catch(() => ({}));
+                        this.log('success', `代理服务器启动请求已发送到 ${startConfig.url}，响应: ${JSON.stringify(responseData)}`);
+                        startSuccess = true;
+                        startResults.push({ url: startConfig.url, status: 'success', data: responseData });
+                        // 延迟检查状态，给代理服务器足够的启动时间
+                        setTimeout(() => {
+                            this.checkProxyStatusHttp();
+                        }, 3000);
+                        break;
+                    } else {
+                        const errorData = await response.json().catch(async () => ({
+                            error: await response.text() || `HTTP ${response.status}`
+                        }));
+                        this.log('debug', `启动请求失败: ${startConfig.url} - ${errorData.error}`);
+                        lastStartError = errorData.error;
+                        startResults.push({ url: startConfig.url, status: 'error', error: errorData.error });
+                    }
+                } catch (error) {
+                    const errorMsg = error.name === 'AbortError' ? '请求超时' : error.message;
+                    this.log('debug', `启动请求异常: ${startConfig.url} - ${errorMsg}`);
+                    lastStartError = errorMsg;
+                    startResults.push({ url: startConfig.url, status: 'failed', error: errorMsg });
+                }
+            }
+            
+            // 记录启动结果
+            this.log('debug', `代理服务器启动结果: ${JSON.stringify(startResults)}`);
+            
+            if (!startSuccess) {
+                this.log('error', `所有启动端点都失败，最后一个错误: ${lastStartError}`);
+                
+                // 检查是否是因为代理管理器未运行（3003端口不可达）
+                const isManagerRunning = await this.checkPortAccessible('http://localhost:3003');
+                if (!isManagerRunning) {
+                    this.log('warning', '代理管理器未运行，尝试直接检查代理服务器是否在运行');
+                    // 直接检查代理服务器是否在运行（可能是手动启动的）
+                    setTimeout(() => {
+                        this.checkProxyStatusHttp();
+                    }, 1000);
+                }
+                
+                // 提供用户指导
+                this.provideProxyStartupGuidance();
+            }
+        } catch (error) {
+            const errorMsg = error.name === 'AbortError' ? '启动代理服务器超时' : `启动代理服务器失败: ${error.message}`;
+            this.log('error', errorMsg);
+            
+            // 提供用户指导
+            this.provideProxyStartupGuidance();
+            
+            // 最后再检查一次状态
+            setTimeout(() => {
+                this.checkProxyStatusHttp();
+            }, 1000);
+        }
+    }
+    
+    /**
+     * 简单检查代理是否在运行，用于避免重复启动
+     */
+    async checkProxyRunningSimple() {
+        try {
+            const response = await fetch('http://localhost:3001/ping', {
+                method: 'GET',
+                timeout: 1000
+            });
+            return response.ok;
+        } catch (error) {
+            return false;
+        }
+    }
+    
+    /**
+     * 检查端口是否可达
+     */
+    async checkPortAccessible(url) {
+        try {
+            const response = await fetch(url, {
+                method: 'HEAD',
+                timeout: 1000
+            });
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+    
+    /**
+     * 提供代理启动指导
+     */
+    provideProxyStartupGuidance() {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            this.log('info', '--- 代理服务器启动指导 ---');
+            this.log('info', '1. 直接启动代理服务器: npm run start:proxy');
+            this.log('info', '2. 启动代理管理器: npm run start');
+            this.log('info', '3. 手动运行代理: node proxy.js');
+            this.log('info', '请确保在项目根目录下执行上述命令');
+            this.log('info', '----------------------------');
+        } else {
+            this.log('error', '非本地环境下无法自动启动代理服务器，请联系管理员');
+        }
+    }
+    
+    /**
+     * 使用HTTP API重启代理服务器
+     */
+    async restartProxyHttp() {
+        try {
+            this.log('info', '尝试使用HTTP API重启代理服务器');
+            
+            // 先检查是否在运行
+            const isRunning = await this.checkProxyRunningSimple();
+            if (!isRunning) {
+                this.log('info', '代理服务器未运行，将尝试启动而不是重启');
+                this.startProxyHttp();
+                return;
+            }
+            
             // 使用 AbortController 实现超时
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const timeout = 5000;
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
             
-            const response = await fetch('http://localhost:3003/api/proxy/start', {
+            const response = await fetch('http://localhost:3003/api/proxy/restart', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1002,57 +1201,32 @@ async checkProxyStatusHttp() {
             clearTimeout(timeoutId);
             
             if (response.ok) {
-                this.log('success', '代理服务器启动请求已发送');
-                // 延迟检查状态，给代理服务器足够的启动时间
+                const responseData = await response.json().catch(() => ({}));
+                this.log('success', `代理服务器重启请求已发送，响应: ${JSON.stringify(responseData)}`);
+                // 重新检查状态，给代理服务器足够的重启时间
                 setTimeout(() => {
                     this.checkProxyStatusHttp();
-                }, 2000);
+                }, 4000);
             } else {
-                const errorData = await response.json();
-                this.log('error', `启动代理服务器失败: ${errorData.error}`);
-            }
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                this.log('error', '使用HTTP API启动代理服务器超时');
-            } else {
-                this.log('error', `使用HTTP API启动代理服务器失败: ${error.message}`);
-            }
-            
-            // 检查是否是因为代理管理器未启动
-            this.log('info', '可能是代理管理器未启动，尝试直接启动代理进程');
-            
-            // 尝试直接启动代理进程（仅在开发环境）
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                this.log('info', '开发环境下，建议手动启动代理服务器：npm run start:proxy');
-            }
-        }
-    }
-    
-    /**
-     * 使用HTTP API重启代理服务器
-     */
-    async restartProxyHttp() {
-        try {
-            this.log('info', '尝试使用HTTP API重启代理服务器');
-            const response = await fetch('http://localhost:3003/api/proxy/restart', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (response.ok) {
-                this.log('success', '代理服务器重启请求已发送');
-                // 重新检查状态
-                setTimeout(() => {
-                    this.checkProxyStatusHttp();
-                }, 2000);
-            } else {
-                const errorData = await response.json();
+                const errorData = await response.json().catch(async () => ({
+                    error: await response.text() || `HTTP ${response.status}`
+                }));
                 this.log('error', `重启代理服务器失败: ${errorData.error}`);
+                
+                // 检查代理管理器是否还在运行
+                const isManagerRunning = await this.checkPortAccessible('http://localhost:3003');
+                if (!isManagerRunning) {
+                    this.log('warning', '代理管理器未运行，尝试直接启动代理服务器');
+                    this.startProxyHttp();
+                }
             }
         } catch (error) {
-            this.log('error', `使用HTTP API重启代理服务器失败: ${error.message}`);
+            const errorMsg = error.name === 'AbortError' ? '重启代理服务器超时' : `重启代理服务器失败: ${error.message}`;
+            this.log('error', errorMsg);
+            
+            // 尝试直接启动代理服务器
+            this.log('info', '重启失败，尝试直接启动代理服务器');
+            this.startProxyHttp();
         }
     }
     

@@ -76,21 +76,32 @@ function updateStatus(newStatus) {
  */
 function checkProxyStatus() {
     return new Promise((resolve) => {
-        // 尝试使用不同的请求方式和路径进行检查
+        // 尝试使用不同的请求方式和路径进行检查，扩展检查路径
         const checkConfigs = [
-            { path: '/translate', method: 'HEAD' },
-            { path: '/status', method: 'GET' },
-            { path: '/ping', method: 'GET' }
+            { path: '/ping', method: 'GET', timeout: 2000 },
+            { path: '/status', method: 'GET', timeout: 2000 },
+            { path: '/translate', method: 'OPTIONS', timeout: 3000 },
+            { path: '/', method: 'GET', timeout: 4000 },
+            { path: '/health', method: 'GET', timeout: 2000 },
+            { path: '/api/health', method: 'GET', timeout: 2000 }
         ];
         let checkIndex = 0;
+        const startTime = Date.now();
         
         const checkNextConfig = () => {
+            // 检查总耗时，避免无限等待
+            if (Date.now() - startTime > 10000) {
+                log('debug', `代理服务器检查总耗时超过10秒，放弃检查`);
+                resolve(false);
+                return;
+            }
+            
             if (checkIndex >= checkConfigs.length) {
                 resolve(false);
                 return;
             }
             
-            const { path, method } = checkConfigs[checkIndex];
+            const { path, method, timeout } = checkConfigs[checkIndex];
             checkIndex++;
             
             const req = http.request({
@@ -98,7 +109,7 @@ function checkProxyStatus() {
                 port: PROXY_PORT,
                 path: path,
                 method: method,
-                timeout: 3000 // 延长超时时间
+                timeout: timeout
             }, (res) => {
                 // 200, 405 (方法不允许), 404 (路径不存在但服务器运行) 都表示服务器正在运行
                 if (res.statusCode >= 200 && res.statusCode < 500) {
@@ -116,7 +127,7 @@ function checkProxyStatus() {
             });
             
             req.on('timeout', () => {
-                log('debug', `代理服务器检查超时，路径: ${path}，方法: ${method}`);
+                log('debug', `代理服务器检查超时，路径: ${path}，方法: ${method}，超时: ${timeout}ms`);
                 req.destroy();
                 checkNextConfig();
             });
