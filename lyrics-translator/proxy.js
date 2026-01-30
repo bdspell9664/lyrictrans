@@ -111,7 +111,7 @@ const server = http.createServer((req, res) => {
             'Content-Type': 'application/json; charset=utf-8',
             'Access-Control-Allow-Origin': '*',
             'Server': 'LyricsTranslator/1.0',
-            'X-Proxy-Version': '1.0.0'
+            'X-Proxy-Version': '1.0.1'
         });
         
         if (req.method === 'GET') {
@@ -119,7 +119,7 @@ const server = http.createServer((req, res) => {
                 status: 'ok',
                 message: 'Proxy server is running',
                 timestamp: new Date().toISOString(),
-                version: '1.0.0',
+                version: '1.0.1',
                 uptime: process.uptime(),
                 memory: process.memoryUsage()
             }));

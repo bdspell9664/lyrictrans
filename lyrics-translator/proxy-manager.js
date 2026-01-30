@@ -275,6 +275,7 @@ function startProxy() {
                     if (proxyProcess) {
                         try {
                             proxyProcess.kill('SIGINT');
+                            // 等待1秒让进程优雅退出
                             await new Promise(resolve => setTimeout(resolve, 1000));
                             if (proxyProcess) {
                                 proxyProcess.kill('SIGKILL');
@@ -528,7 +529,7 @@ function createHttpApiServer() {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     name: 'Proxy Manager API',
-                    version: '1.0.0',
+                    version: '1.0.1',
                     description: '代理服务器管理API',
                     endpoints: [
                         '/api/proxy/status',

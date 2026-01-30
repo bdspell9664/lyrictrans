@@ -9,7 +9,7 @@ class LyricTranslatorApp {
      */
     constructor() {
         // 应用版本号
-        this.version = '1.0.0';
+        this.version = '1.0.1';
         
         this.uploadedFiles = [];
         this.currentFileIndex = 0;
@@ -122,6 +122,7 @@ class LyricTranslatorApp {
         this.consoleContainer = document.querySelector('.console-container');
         this.toggleConsoleBtn = document.getElementById('toggleConsole');
         this.clearLogBtn = document.getElementById('clearLog');
+        this.copyLogBtn = document.getElementById('copyLog');
         this.consoleLog = document.getElementById('consoleLog');
         this.proxyStatus = document.getElementById('proxyStatus');
         
@@ -135,6 +136,7 @@ class LyricTranslatorApp {
         console.log('consoleContainer:', this.consoleContainer);
         console.log('toggleConsoleBtn:', this.toggleConsoleBtn);
         console.log('clearLogBtn:', this.clearLogBtn);
+        console.log('copyLogBtn:', this.copyLogBtn);
         console.log('consoleLog:', this.consoleLog);
         console.log('proxyStatus:', this.proxyStatus);
         console.log('startProxyBtn:', this.startProxyBtn);
@@ -454,6 +456,13 @@ class LyricTranslatorApp {
             console.log('清空日志事件绑定成功');
         }
         
+        if (this.copyLogBtn) {
+            this.copyLogBtn.addEventListener('click', () => {
+                this.copyLog();
+            });
+            console.log('复制日志事件绑定成功');
+        }
+        
         // 代理控制按钮事件
         if (this.startProxyBtn) {
             this.startProxyBtn.addEventListener('click', () => {
@@ -621,6 +630,82 @@ class LyricTranslatorApp {
         if (!this.consoleLog) return;
         this.consoleLog.innerHTML = '';
         this.log('info', '日志已清空');
+    }
+    
+    /**
+     * 复制日志到剪贴板
+     */
+    async copyLog() {
+        if (!this.consoleLog) return;
+        
+        try {
+            // 获取所有日志元素
+            const logElements = this.consoleLog.querySelectorAll('div[class^="log-"]');
+            if (logElements.length === 0) {
+                this.log('warning', '日志为空，无需复制');
+                return;
+            }
+            
+            // 提取日志内容
+            let logContent = '';
+            logElements.forEach((element, index) => {
+                // 获取时间和消息
+                const timeElement = element.querySelector('.log-time');
+                const time = timeElement ? timeElement.textContent : '';
+                const message = element.textContent.replace(time, '').trim();
+                
+                // 格式化日志条目
+                logContent += `${time}${message}\n`;
+            });
+            
+            // 复制到剪贴板
+            await navigator.clipboard.writeText(logContent);
+            
+            // 操作成功反馈
+            this.log('success', '日志已成功复制到剪贴板');
+            
+            // 显示短暂的提示消息
+            const notification = document.createElement('div');
+            notification.className = 'notification success';
+            notification.textContent = '日志已成功复制到剪贴板';
+            notification.style.position = 'fixed';
+            notification.style.bottom = '20px';
+            notification.style.right = '20px';
+            notification.style.padding = '10px 15px';
+            notification.style.backgroundColor = '#4CAF50';
+            notification.style.color = 'white';
+            notification.style.borderRadius = '4px';
+            notification.style.zIndex = '1000';
+            document.body.appendChild(notification);
+            
+            // 3秒后移除提示
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+            
+        } catch (error) {
+            // 操作失败反馈
+            this.log('error', `复制日志失败: ${error.message}`);
+            
+            // 显示短暂的错误提示
+            const notification = document.createElement('div');
+            notification.className = 'notification error';
+            notification.textContent = '复制日志失败，请手动复制';
+            notification.style.position = 'fixed';
+            notification.style.bottom = '20px';
+            notification.style.right = '20px';
+            notification.style.padding = '10px 15px';
+            notification.style.backgroundColor = '#f44336';
+            notification.style.color = 'white';
+            notification.style.borderRadius = '4px';
+            notification.style.zIndex = '1000';
+            document.body.appendChild(notification);
+            
+            // 3秒后移除提示
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
     }
     
     /**
@@ -911,115 +996,115 @@ class LyricTranslatorApp {
     }
     
     /**
- * 使用HTTP API检查代理状态（WebSocket不可用时的备选方案）
- */
-async checkProxyStatusHttp() {
-    const statusElement = document.getElementById('proxyStatus');
-    if (!statusElement) return;
-    
-    // 检查状态缓存，避免频繁检测
-    if (this.proxyStatusCache && Date.now() - this.proxyStatusCache.timestamp < 30000) {
-        this.log('info', '使用缓存的代理服务器状态');
-        this.updateProxyStatusDisplay(this.proxyStatusCache.status);
-        return;
-    }
-    
-    statusElement.textContent = '代理状态：检查中...';
-    statusElement.className = 'status-indicator checking';
-    this.log('info', '开始使用HTTP API检查代理服务器状态');
-    
-    // 尝试不同的路径和方法进行检查，调整优先级
-    const checkUrls = [
-        { url: 'http://localhost:3001/ping', method: 'GET', priority: 'high' },
-        { url: 'http://localhost:3001/status', method: 'GET', priority: 'high' },
-        { url: 'http://localhost:3001/health', method: 'GET', priority: 'high' },
-        { url: 'http://localhost:3001/api/health', method: 'GET', priority: 'high' },
-        { url: 'http://localhost:3001/translate', method: 'OPTIONS', priority: 'medium' },
-        { url: 'http://localhost:3001', method: 'HEAD', priority: 'low' },
-        { url: 'http://localhost:3003/api/proxy/status', method: 'GET', priority: 'medium' }
-    ];
-    
-    let isRunning = false;
-    let lastError = null;
-    let checkResults = [];
-    
-    // 尝试所有检查URL
-    for (const checkConfig of checkUrls) {
-        try {
-            // 使用 AbortController 实现超时，根据优先级调整超时时间
-            const timeout = checkConfig.priority === 'high' ? 2000 : checkConfig.priority === 'medium' ? 3000 : 5000;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-            
-            // 检查代理服务器
-            const response = await fetch(checkConfig.url, {
-                method: checkConfig.method,
-                signal: controller.signal,
-                headers: {
-                    'Content-Type': 'application/json'
+     * 使用HTTP API检查代理状态（WebSocket不可用时的备选方案）
+     */
+    async checkProxyStatusHttp() {
+        const statusElement = document.getElementById('proxyStatus');
+        if (!statusElement) return;
+        
+        // 检查状态缓存，避免频繁检测
+        if (this.proxyStatusCache && Date.now() - this.proxyStatusCache.timestamp < 30000) {
+            this.log('info', '使用缓存的代理服务器状态');
+            this.updateProxyStatusDisplay(this.proxyStatusCache.status);
+            return;
+        }
+        
+        statusElement.textContent = '代理状态：检查中...';
+        statusElement.className = 'status-indicator checking';
+        this.log('info', '开始使用HTTP API检查代理服务器状态');
+        
+        // 尝试不同的路径和方法进行检查，调整优先级
+        const checkUrls = [
+            { url: 'http://localhost:3001/ping', method: 'GET', priority: 'high' },
+            { url: 'http://localhost:3001/status', method: 'GET', priority: 'high' },
+            { url: 'http://localhost:3001/health', method: 'GET', priority: 'high' },
+            { url: 'http://localhost:3001/api/health', method: 'GET', priority: 'high' },
+            { url: 'http://localhost:3001/translate', method: 'OPTIONS', priority: 'medium' },
+            { url: 'http://localhost:3001', method: 'HEAD', priority: 'low' },
+            { url: 'http://localhost:3003/api/proxy/status', method: 'GET', priority: 'medium' }
+        ];
+        
+        let isRunning = false;
+        let lastError = null;
+        let checkResults = [];
+        
+        // 尝试所有检查URL
+        for (const checkConfig of checkUrls) {
+            try {
+                // 使用 AbortController 实现超时，根据优先级调整超时时间
+                const timeout = checkConfig.priority === 'high' ? 2000 : checkConfig.priority === 'medium' ? 3000 : 5000;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                // 检查代理服务器
+                const response = await fetch(checkConfig.url, {
+                    method: checkConfig.method,
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                clearTimeout(timeoutId);
+                
+                // 只要服务器返回2xx或3xx状态码，就认为代理正在运行
+                if (response.status >= 200 && response.status < 500) {
+                    isRunning = true;
+                    this.log('success', `代理服务器检测成功: ${checkConfig.url} (状态码: ${response.status})`);
+                    checkResults.push({ url: checkConfig.url, status: 'success', code: response.status });
+                    break;
+                } else {
+                    const errorMsg = `代理服务器响应错误: ${response.status}`;
+                    lastError = new Error(errorMsg);
+                    this.log('debug', `${checkConfig.url} 响应状态: ${response.status}`);
+                    checkResults.push({ url: checkConfig.url, status: 'error', code: response.status });
                 }
-            });
-            
-            clearTimeout(timeoutId);
-            
-            // 只要服务器返回2xx或3xx状态码，就认为代理正在运行
-            if (response.status >= 200 && response.status < 500) {
-                isRunning = true;
-                this.log('success', `代理服务器检测成功: ${checkConfig.url} (状态码: ${response.status})`);
-                checkResults.push({ url: checkConfig.url, status: 'success', code: response.status });
-                break;
-            } else {
-                const errorMsg = `代理服务器响应错误: ${response.status}`;
-                lastError = new Error(errorMsg);
-                this.log('debug', `${checkConfig.url} 响应状态: ${response.status}`);
-                checkResults.push({ url: checkConfig.url, status: 'error', code: response.status });
+            } catch (error) {
+                const errorMsg = error.name === 'AbortError' ? '请求超时' : error.message;
+                this.log('debug', `${checkConfig.url} 检查失败: ${errorMsg}`);
+                lastError = error;
+                checkResults.push({ url: checkConfig.url, status: 'failed', error: errorMsg });
             }
-        } catch (error) {
-            const errorMsg = error.name === 'AbortError' ? '请求超时' : error.message;
-            this.log('debug', `${checkConfig.url} 检查失败: ${errorMsg}`);
-            lastError = error;
-            checkResults.push({ url: checkConfig.url, status: 'failed', error: errorMsg });
         }
-    }
-    
-    // 记录检查结果
-    this.log('debug', `代理服务器检查结果: ${JSON.stringify(checkResults)}`);
-    
-    // 更新状态显示和缓存
-    if (isRunning) {
-        this.updateProxyStatusDisplay('running');
-        // 缓存成功状态，有效期30秒
-        this.proxyStatusCache = {
-            status: 'running',
-            timestamp: Date.now()
-        };
-    } else {
-        this.updateProxyStatusDisplay('stopped');
-        // 缓存失败状态，有效期10秒
-        this.proxyStatusCache = {
-            status: 'stopped',
-            timestamp: Date.now()
-        };
         
-        if (lastError) {
-            if (lastError.name === 'AbortError') {
-                this.log('warning', '代理服务器检测超时，可能离线或网络连接问题');
-            } else {
-                this.log('error', `代理服务器检测失败: ${lastError.message}`);
-            }
+        // 记录检查结果
+        this.log('debug', `代理服务器检查结果: ${JSON.stringify(checkResults)}`);
+        
+        // 更新状态显示和缓存
+        if (isRunning) {
+            this.updateProxyStatusDisplay('running');
+            // 缓存成功状态，有效期30秒
+            this.proxyStatusCache = {
+                status: 'running',
+                timestamp: Date.now()
+            };
         } else {
-            this.log('error', '代理服务器检测失败: 未知错误');
-        }
-        
-        // 尝试启动代理，但增加延迟，避免频繁启动
-        if (!this.isProxyStartAttempted || Date.now() - this.isProxyStartAttempted > 15000) {
-            this.isProxyStartAttempted = Date.now();
-            setTimeout(() => {
-                this.startProxyHttp();
-            }, 1000);
+            this.updateProxyStatusDisplay('stopped');
+            // 缓存失败状态，有效期10秒
+            this.proxyStatusCache = {
+                status: 'stopped',
+                timestamp: Date.now()
+            };
+            
+            if (lastError) {
+                if (lastError.name === 'AbortError') {
+                    this.log('warning', '代理服务器检测超时，可能离线或网络连接问题');
+                } else {
+                    this.log('error', `代理服务器检测失败: ${lastError.message}`);
+                }
+            } else {
+                this.log('error', '代理服务器检测失败: 未知错误');
+            }
+            
+            // 尝试启动代理，但增加延迟，避免频繁启动
+            if (!this.isProxyStartAttempted || Date.now() - this.isProxyStartAttempted > 15000) {
+                this.isProxyStartAttempted = Date.now();
+                setTimeout(() => {
+                    this.startProxyHttp();
+                }, 1000);
+            }
         }
     }
-}
     
     /**
      * 使用HTTP API启动代理服务器
@@ -1129,10 +1214,17 @@ async checkProxyStatusHttp() {
      */
     async checkProxyRunningSimple() {
         try {
+            // 使用 AbortController 实现超时
+            const controller = new AbortController();
+            const timeout = 1000;
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            
             const response = await fetch('http://localhost:3001/ping', {
                 method: 'GET',
-                timeout: 1000
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             return response.ok;
         } catch (error) {
             return false;
@@ -1144,10 +1236,17 @@ async checkProxyStatusHttp() {
      */
     async checkPortAccessible(url) {
         try {
+            // 使用 AbortController 实现超时
+            const controller = new AbortController();
+            const timeout = 1000;
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            
             const response = await fetch(url, {
                 method: 'HEAD',
-                timeout: 1000
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             return true;
         } catch (error) {
             return false;
